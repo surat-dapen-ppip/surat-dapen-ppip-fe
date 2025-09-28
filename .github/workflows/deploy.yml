@@ -18,22 +18,9 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Prepare project dir & copy ENV to VPS
+      - name: Deploy to VPS via SSH
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
-        run: |
-          PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
-          
-          # ensure project dir exists on VPS
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "mkdir -p $PROJECT_DIR"
-          
-          # write secret ENV_FILE to .env
-          echo "$ENV_FILE" > .env
-          
-          # copy .env to VPS
-          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:$PROJECT_DIR/.env
-
-      - name: Deploy to VPS via SSH
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
             PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
@@ -45,14 +32,22 @@ jobs:
 
             cd $PROJECT_DIR
 
-            # fetch & reset to main (update if repo already exists)
+            # fetch & reset to main (update jika repo sudah ada)
             git fetch origin main
             git reset --hard origin/main
+          EOF
 
-            # build docker image
+          # --- copy env setelah repo sudah siap ---
+          echo "$ENV_FILE" > .env
+          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
+
+          # --- lanjut build & run docker ---
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
+            cd $PROJECT_DIR
+
             docker build -t surat-dapen-ppip-fe:latest .
 
-            # stop old container & run new one
             docker rm -f surat-dapen-ppip-fe || true
             docker run -d --name surat-dapen-ppip-fe --env-file .env -p 3000:3000 surat-dapen-ppip-fe:latest
           EOF
