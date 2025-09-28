@@ -1,0 +1,52 @@
+name: CI/CD Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Copy ENV file to VPS
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          # write secret ENV_FILE to .env
+          echo "$ENV_FILE" > .env
+          # copy .env to the VPS project directory (adjust path on server if needed)
+          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
+
+      - name: Deploy to VPS via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
+
+            # clone if missing
+            if [ ! -d "$PROJECT_DIR/.git" ]; then
+              git clone git@github.com:surat-dapen-ppip/surat-dapen-ppip-fe.git $PROJECT_DIR
+            fi
+
+            cd $PROJECT_DIR
+
+            # fetch & reset to main
+            git fetch origin main
+            git reset --hard origin/main
+
+            # build docker image
+            docker build -t surat-dapen-ppip-fe:latest .
+
+            # stop old container & run new one
+            docker rm -f surat-dapen-ppip-fe || true
+            docker run -d --name surat-dapen-ppip-fe --env-file .env -p 3000:3000 surat-dapen-ppip-fe:latest
+          EOF
