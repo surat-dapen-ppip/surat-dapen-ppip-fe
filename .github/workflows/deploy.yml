@@ -18,14 +18,20 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Copy ENV file to VPS
+      - name: Prepare project dir & copy ENV to VPS
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
+          PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
+          
+          # ensure project dir exists on VPS
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "mkdir -p $PROJECT_DIR"
+          
           # write secret ENV_FILE to .env
           echo "$ENV_FILE" > .env
-          # copy .env to the VPS project directory (adjust path on server if needed)
-          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
+          
+          # copy .env to VPS
+          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:$PROJECT_DIR/.env
 
       - name: Deploy to VPS via SSH
         run: |
@@ -39,7 +45,7 @@ jobs:
 
             cd $PROJECT_DIR
 
-            # fetch & reset to main
+            # fetch & reset to main (update if repo already exists)
             git fetch origin main
             git reset --hard origin/main
 
