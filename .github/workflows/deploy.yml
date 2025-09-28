@@ -1,53 +1,64 @@
 name: CI/CD Deploy Frontend
 
 on:
-  push:
-    branches:
-      - main
+push:
+branches:
+- main
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+deploy:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+```
+steps:
+  - name: Checkout repo
+    uses: actions/checkout@v3
 
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+  - name: Setup SSH Agent
+    uses: webfactory/ssh-agent@v0.9.0
+    with:
+      ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Deploy to VPS via SSH
-        env:
-          ENV_FILE: ${{ secrets.ENV_FILE }}
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
+  # --- Stage 1: Clone or Pull Project ---
+  - name: Clone or Pull Project
+    run: |
+      ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+        PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
 
-            # clone if missing
-            if [ ! -d "$PROJECT_DIR/.git" ]; then
-              git clone git@github.com:surat-dapen-ppip/surat-dapen-ppip-fe.git $PROJECT_DIR
-            fi
+        # kalau belum ada repo git → clone baru
+        if [ ! -d "$PROJECT_DIR/.git" ]; then
+          rm -rf $PROJECT_DIR
+          git clone git@github.com:surat-dapen-ppip/surat-dapen-ppip-fe.git $PROJECT_DIR
+        fi
 
-            cd $PROJECT_DIR
+        cd $PROJECT_DIR
 
-            # fetch & reset to main (update jika repo sudah ada)
-            git fetch origin main
-            git reset --hard origin/main
-          EOF
+        # update repo ke branch main
+        git fetch origin main
+        git reset --hard origin/main
+      EOF
 
-          # --- copy env setelah repo sudah siap ---
-          echo "$ENV_FILE" > .env
-          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
+  # --- Stage 2: Upload ENV ---
+  - name: Upload .env to VPS
+    env:
+      ENV_FILE: ${{ secrets.ENV_FILE }}
+    run: |
+      echo "$ENV_FILE" | sed 's/ *= */=/' > .env
+      scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
 
-          # --- lanjut build & run docker ---
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
-            cd $PROJECT_DIR
+  # --- Stage 3: Build & Run Docker ---
+  - name: Build & Run Docker
+    run: |
+      ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+        PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
+        cd $PROJECT_DIR
 
-            docker build -t surat-dapen-ppip-fe:latest .
+        docker build -t surat-dapen-ppip-fe:latest .
 
-            docker rm -f surat-dapen-ppip-fe || true
-            docker run -d --name surat-dapen-ppip-fe --env-file .env -p 3000:3000 surat-dapen-ppip-fe:latest
-          EOF
+        docker rm -f surat-dapen-ppip-fe || true
+        docker run -d --name surat-dapen-ppip-fe \
+          --env-file .env \
+          -p 3000:3000 \
+          --restart always \
+          surat-dapen-ppip-fe:latest
+      EOF
