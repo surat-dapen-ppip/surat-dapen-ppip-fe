@@ -10,54 +10,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --- Stage 1: Checkout source ---
       - name: Checkout repo
         uses: actions/checkout@v3
 
+      # --- Stage 2: Setup Node.js ---
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      # --- Stage 3: Install deps & Build ---
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      # --- Stage 4: Compress build result ---
+      - name: Archive build files
+        run: |
+          tar -czf build.tar.gz .next package.json next.config.js public
+
+      # --- Stage 5: Setup SSH ---
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # --- Stage 1: Clone or Pull Project ---
-      - name: Clone or Pull Project
+      # --- Stage 6: Upload to server ---
+      - name: Upload build to VPS
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
+          scp -o StrictHostKeyChecking=no build.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/
 
-            # kalau belum ada repo git → clone baru
-            if [ ! -d "$PROJECT_DIR/.git" ]; then
-              rm -rf $PROJECT_DIR
-              git clone git@github.com:surat-dapen-ppip/surat-dapen-ppip-fe.git $PROJECT_DIR
-            fi
-
-            cd $PROJECT_DIR
-
-            # update repo ke branch main
-            git fetch origin main
-            git reset --hard origin/main
-          EOF
-
-      # --- Stage 2: Upload ENV ---
-      - name: Upload .env to VPS
-        env:
-          ENV_FILE: ${{ secrets.ENV_FILE }}
-        run: |
-          echo "$ENV_FILE" | sed 's/ *= */=/' > .env
-          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
-
-      # --- Stage 3: Build & Run Docker ---
-      - name: Build & Run Docker
+      # --- Stage 7: Deploy on server ---
+      - name: Deploy on server
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
             PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
             cd $PROJECT_DIR
 
-            docker build -t surat-dapen-ppip-fe:latest .
+            # Extract build result
+            tar -xzf build.tar.gz
+            rm -f build.tar.gz
 
+            # Restart docker container / pm2
             docker rm -f surat-dapen-ppip-fe || true
             docker run -d --name surat-dapen-ppip-fe \
-              --env-file .env \
+              -v $PROJECT_DIR:/app \
+              -w /app \
               -p 3000:3000 \
-              --restart always \
-              surat-dapen-ppip-fe:latest
+              node:20-alpine \
+              sh -c "npm install --omit=dev && npm run start"
           EOF
