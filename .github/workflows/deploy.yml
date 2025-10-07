@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # --- Stage 1: Checkout source ---
+      # --- Stage 1: Checkout Source Code ---
       - name: Checkout repo
         uses: actions/checkout@v3
 
@@ -20,46 +20,81 @@ jobs:
         with:
           node-version: 20
 
-      # --- Stage 3: Install deps & Build ---
+      # --- Stage 3: Install dependencies & Build ---
       - name: Install dependencies
         run: npm ci
 
       - name: Build project
         run: npm run build
 
-      # --- Stage 4: Compress build result ---
+      # --- Stage 4: Archive build result ---
+      # Menghindari error jika next.config.js tidak ada
       - name: Archive build files
         run: |
-          tar -czf build.tar.gz .next package.json next.config.js public
+          echo "🔧 Archiving build result..."
+          mkdir -p release
+          cp -r .next public package.json release/
+          # copy config file kalau ada
+          if [ -f next.config.js ]; then
+            cp next.config.js release/
+          elif [ -f next.config.mjs ]; then
+            cp next.config.mjs release/
+          else
+            echo "ℹ️ No next.config.js or next.config.mjs found, skip..."
+          fi
+          cd release
+          tar -czf ../build.tar.gz .
+          cd ..
+          echo "✅ Build archived successfully."
 
-      # --- Stage 5: Setup SSH ---
+      # --- Stage 5: Setup SSH Agent ---
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # --- Stage 6: Upload to server ---
+      # --- Stage 6: Upload .env file ke server ---
+      - name: Upload .env to VPS
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          echo "$ENV_FILE" | sed 's/ *= */=/' > .env
+          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
+          rm .env
+
+      # --- Stage 7: Upload build result ke VPS ---
       - name: Upload build to VPS
         run: |
-          scp -o StrictHostKeyChecking=no build.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/
+          echo "📦 Uploading build.tar.gz to server..."
+          scp -o StrictHostKeyChecking=no build.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/build.tar.gz
+          echo "✅ Upload complete."
 
-      # --- Stage 7: Deploy on server ---
+      # --- Stage 8: Deploy di server ---
       - name: Deploy on server
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -e
             PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
             cd $PROJECT_DIR
 
-            # Extract build result
-            tar -xzf build.tar.gz
-            rm -f build.tar.gz
+            echo "🧹 Cleaning old build..."
+            rm -rf .next public package.json next.config.* || true
 
-            # Restart docker container / pm2
+            echo "📦 Extracting new build..."
+            tar -xzf build.tar.gz
+            rm build.tar.gz
+
+            echo "🔄 Restarting container..."
             docker rm -f surat-dapen-ppip-fe || true
+
             docker run -d --name surat-dapen-ppip-fe \
               -v $PROJECT_DIR:/app \
               -w /app \
+              --env-file .env \
               -p 3000:3000 \
+              --restart always \
               node:20-alpine \
               sh -c "npm install --omit=dev && npm run start"
+
+            echo "✅ Deployment completed successfully!"
           EOF
