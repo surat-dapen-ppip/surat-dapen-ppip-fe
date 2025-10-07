@@ -418,7 +418,7 @@ export default function pageHistory() {
                             {pdfUrl && (
                                 <div style={{ marginTop: '20px' }}>
                                     <h3>PDF Preview:</h3>
-                                    <Worker workerUrl={`https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js`}>
+                                    <Worker workerUrl={`https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`}>
                                         <div
                                             style={{
                                                 border: '1px solid rgba(0, 0, 0, 0.3)',
