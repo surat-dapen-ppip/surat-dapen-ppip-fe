@@ -10,63 +10,68 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # === Stage 1: Checkout Repository ===
       - name: Checkout repo
         uses: actions/checkout@v3
 
+      # === Stage 2: Setup Node.js ===
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
-      # --- Stage 1: Generate .env from secrets ---
-      - name: Create .env from Secrets
-        run: |
-          echo "${{ secrets.ENV_FILE }}" > .env
-          echo "✅ .env file created successfully"
-
-      # --- Stage 2: Install & Build Next.js ---
-      - name: Install & Build
+      # === Stage 3: Install Dependencies & Build ===
+      - name: Install & Build Next.js
         run: |
           npm ci
           npm run build
+          tar -czf build.tar.gz .next public package.json next.config.mjs Dockerfile
 
-      # --- Stage 3: Archive build output (no source code, only dist) ---
-      - name: Archive prebuilt app
-        run: |
-          tar -czf build.tar.gz .next package.json package-lock.json node_modules public .env next.config.* || echo "skip missing next.config"
-
-      # --- Stage 4: Setup SSH Agent ---
+      # === Stage 4: Setup SSH Agent ===
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # --- Stage 5: Upload to VPS ---
-      - name: Upload build to VPS
+      # === Stage 5: Upload .env to VPS ===
+      - name: Upload .env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
-          scp -o StrictHostKeyChecking=no build.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/build.tar.gz
+          echo "$ENV_FILE" > .env
+          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SERVER_USER }}/surat-dapen-ppip-fe/.env
 
-      # --- Stage 6: Deploy on VPS (no build, only run Docker) ---
+      # === Stage 6: Upload Build Artifact ===
+      - name: Upload Build Artifact
+        run: |
+          scp -o StrictHostKeyChecking=no build.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SERVER_USER }}/surat-dapen-ppip-fe/build.tar.gz
+
+      # === Stage 7: Deploy on VPS ===
       - name: Deploy on VPS
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
+            set -e
+            PROJECT_DIR=/home/${USER}/surat-dapen-ppip-fe
             cd $PROJECT_DIR
 
             echo "🧹 Cleaning old container..."
             docker rm -f surat-dapen-ppip-fe || true
 
+            echo "🧹 Cleaning old build..."
+            rm -rf .next public package.json next.config.mjs Dockerfile || true
+
             echo "📦 Extracting new build..."
-            rm -rf .next node_modules public .env package.json package-lock.json
             tar -xzf build.tar.gz
 
-            echo "🚀 Rebuilding lightweight Docker image..."
+            echo "🐳 Building new Docker image..."
             docker build -t surat-dapen-ppip-fe:latest .
 
-            echo "🏃 Running container..."
+            echo "🚀 Running new container..."
             docker run -d --name surat-dapen-ppip-fe \
+              --env-file .env \
               -p 3000:3000 \
               --restart always \
               surat-dapen-ppip-fe:latest
+
+            echo "✅ Deployment success!"
           EOF
