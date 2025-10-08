@@ -10,60 +10,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # --- Stage 1: Checkout repository ---
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # --- Stage 2: Setup Node.js ---
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      # --- Stage 3: Generate .env from secrets (ENV_FILE) ---
+      # --- Stage 1: Generate .env from secrets ---
       - name: Create .env from Secrets
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
           echo "✅ .env file created successfully"
-        shell: bash
 
-      # --- Stage 4: Install dependencies & Build ---
+      # --- Stage 2: Install & Build Next.js ---
       - name: Install & Build
         run: |
           npm ci
           npm run build
 
-      # --- Stage 5: Archive build output ---
-      - name: Archive build
+      # --- Stage 3: Archive build output (no source code, only dist) ---
+      - name: Archive prebuilt app
         run: |
-          tar -czf build.tar.gz .next package.json public .env next.config.* || echo "skip missing next.config"
+          tar -czf build.tar.gz .next package.json package-lock.json node_modules public .env next.config.* || echo "skip missing next.config"
 
-      # --- Stage 6: Setup SSH Agent ---
+      # --- Stage 4: Setup SSH Agent ---
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # --- Stage 7: Upload build to VPS ---
+      # --- Stage 5: Upload to VPS ---
       - name: Upload build to VPS
         run: |
           scp -o StrictHostKeyChecking=no build.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/build.tar.gz
 
-      # --- Stage 8: Deploy on VPS ---
+      # --- Stage 6: Deploy on VPS (no build, only run Docker) ---
       - name: Deploy on VPS
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
             PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
             cd $PROJECT_DIR
 
+            echo "🧹 Cleaning old container..."
             docker rm -f surat-dapen-ppip-fe || true
-            rm -rf .next
+
+            echo "📦 Extracting new build..."
+            rm -rf .next node_modules public .env package.json package-lock.json
             tar -xzf build.tar.gz
 
+            echo "🚀 Rebuilding lightweight Docker image..."
             docker build -t surat-dapen-ppip-fe:latest .
+
+            echo "🏃 Running container..."
             docker run -d --name surat-dapen-ppip-fe \
-              --env-file .env \
               -p 3000:3000 \
               --restart always \
               surat-dapen-ppip-fe:latest
