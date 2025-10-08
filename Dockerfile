@@ -1,15 +1,17 @@
-# 🧩 Runtime-only image (no build, already prebuilt in CI/CD)
-FROM node:20-alpine
-
+# === Dockerfile (runtime only) ===
+FROM node:20-alpine AS runner
 WORKDIR /app
+
 ENV NODE_ENV=production
 
-# Create non-root user
-RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
-USER nextjs
+# Copy hasil build dari GitHub Actions
+COPY .next ./.next
+COPY public ./public
+COPY package.json ./
+COPY next.config.mjs ./
 
-# Copy prebuilt files from CI/CD (will come via tar in deploy.yml)
-COPY . .
+# Install dependencies production only
+RUN npm ci --omit=dev
 
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["npm", "start"]
