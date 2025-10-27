@@ -11,7 +11,7 @@ import { useState, useEffect } from 'react';
 
 export default function Layout({ children }) {
     const router = useRouter()
-    const { role, name, countInbox, countHistory, handleLogout } = useLayoutContext();
+    const { role, name, countInbox, countHistory, countDaftarSurat,  handleLogout } = useLayoutContext();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
 
@@ -108,7 +108,12 @@ export default function Layout({ children }) {
                                         { href: "/admin/suratKeluar", label: "Surat Keluar" },
                                         { href: "/admin/suratMasuk", label: "Surat Masuk", hidden: role != "0" ? true : false },
                                         { href: "/admin/memoDinas", label: "Memo Dinas" },
-                                        { href: "/admin/daftarSurat", label: "Daftar Surat" },
+                                        { href: "/admin/daftarSurat", label: (
+                                            <div className="flex items-center">
+                                                <span>Daftar Surat</span>
+                                                <div className='text-xs ml-2 bg-blue-100 px-2 py-1 rounded-full font-semibold'>{countDaftarSurat}</div>
+                                            </div>
+                                        )},
                                         { href: "/admin/archive/suratKeluar", label: "Arsip Surat Keluar", hidden: role != "0" ? true : false },
                                     ]}
                                     title={(

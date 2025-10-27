@@ -89,8 +89,8 @@ export default function RichEditSignatureComponent({
           position: -1000,
         },
         verticalPosition: {
-          relativeTo: 0,
-          position: 100,
+          relativeTo: 5,
+          position: -2000,
         },
         wrapSide: 1,
         wrapType: 5

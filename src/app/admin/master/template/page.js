@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/rules-of-hooks */
 import { createTemplateSurat, deleteTemplateSurat, getTemplateNameSurat, getTemplateSurat, getTemplateSuratByUid, getTypeNameSurat, updateTemplateSurat } from "@/services/messageTemplate"
-import { AutoComplete, Col, Form, message, Modal, Popconfirm, Row, Select, Table } from "antd"
+import { AutoComplete, Col, Form, Input, message, Modal, Popconfirm, Row, Select, Table } from "antd"
 import { Suspense, useEffect, useState } from "react"
 import { GetBaseTemplate } from '@/utils/messageUtil';
 import dynamic from 'next/dynamic'
@@ -92,6 +92,7 @@ const ModalTemplate = ({
                 formTemplateSurat.setFieldValue('MessageClassification', response.data.MessageClassification)
                 formTemplateSurat.setFieldValue('TypeName', response.data.TypeName)
                 formTemplateSurat.setFieldValue('TemplateName', response.data.TemplateName)
+                formTemplateSurat.setFieldValue('TemplateCode', response.data.TemplateCode)
                 setMessageClassification(response.data.MessageClassification)
                 setTimeout(() => {
                     setCurrentDocument(response.data.Content)
@@ -131,7 +132,7 @@ const ModalTemplate = ({
                 onFinish={handleTriggerForm}
             >
                 <Row gutter={20}>
-                    <Col lg={8}>
+                    <Col lg={6}>
                         <Form.Item
                             label={"Jenis Surat"}
                             name={'MessageClassification'}
@@ -148,7 +149,7 @@ const ModalTemplate = ({
                             />
                         </Form.Item>
                     </Col>
-                    <Col lg={8}>
+                    <Col lg={6}>
                         <Form.Item
                             label={"Tipe Surat"}
                             name={'TypeName'}
@@ -167,7 +168,7 @@ const ModalTemplate = ({
                             />
                         </Form.Item>
                     </Col>
-                    <Col lg={8}>
+                    <Col lg={6}>
                         <Form.Item
                             label={"Template Surat"}
                             name={'TemplateName'}
@@ -178,6 +179,18 @@ const ModalTemplate = ({
                                 popupMatchSelectWidth={500}
                                 size="large"
                                 options={optionTemplate}
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col lg={6}>
+                        <Form.Item
+                            label={"Kode Template"}
+                            name={'TemplateCode'}
+                            rules={[{ required: true, message: 'Tolong masukkan Kode Template' }]}
+                        >
+                            <AutoComplete
+                                placeholder="Misal : SDI, EDR, INS, KET, LDS"
+                                size="large"
                             />
                         </Form.Item>
                     </Col>

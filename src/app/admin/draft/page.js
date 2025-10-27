@@ -221,13 +221,19 @@ export default function pageDraft() {
         data.ReviewerUID = listReviewerUID.join(',');
 
         try {
-            const media = await handleUploadFile()
-            let mediaUID = dataMedia?.UID
-            if (media != null) {
-                mediaUID = media.data.UID
+            const uploadedUIDs = await handleUploadFile()
+
+            // Merge existing ListMedia (string or array) with newly uploaded UIDs
+            let existingList = []
+            if (Array.isArray(dataMessage?.ListMedia)) {
+                existingList = dataMessage.ListMedia
+            } else if (typeof dataMessage?.ListMedia === 'string' && dataMessage.ListMedia !== '') {
+                existingList = [dataMessage.ListMedia]
             }
 
-            data.ListMedia = mediaUID
+            const combinedUIDs = [...existingList, ...(uploadedUIDs || [])].filter(Boolean)
+
+            data.ListMedia = combinedUIDs
 
             await updateMessage(UID, data)
             setFileList([])
@@ -249,25 +255,25 @@ export default function pageDraft() {
 
     const handleUploadFile = async () => {
         if (fileList.length === 0) {
-            setLoadingSubmit(false)
-            return null
+            return []
         }
 
-        // Create a FormData object to hold the file
-        const formData = new FormData();
-        formData.append('file', fileList[0].originFileObj); // The file to upload
-
         try {
-            // Make a POST request to your Go backend
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
+            // Upload all selected files (up to maxCount)
+            const uploadPromises = fileList.map(async (fileItem) => {
+                const formData = new FormData();
+                formData.append('file', fileItem.originFileObj);
+                const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                });
+                return response.data?.UID;
+            })
 
-            // Success response
+            const uids = await Promise.all(uploadPromises)
             message.success('Attachment uploaded successfully');
-            return response.data
+            return uids.filter(Boolean)
         } catch (error) {
             message.error('Failed to upload Attachment');
             throw error;
@@ -277,10 +283,8 @@ export default function pageDraft() {
 
     // Handle file selection and validation
     const handleChangeFile = ({ fileList }) => {
-        const file = fileList[0]?.originFileObj;
-        if (file) {
-            setFileList(fileList.slice(-1)); // Only keep the last file (single file upload)
-        }
+        // Keep up to 3 files (respect maxCount)
+        setFileList(fileList.slice(-3));
     };
 
     // Validate file type and size before uploading
@@ -783,7 +787,7 @@ export default function pageDraft() {
                                         fileList={fileList}
                                         onChange={handleChangeFile}
                                         beforeUpload={beforeUpload}
-                                        maxCount={1} // Restrict to single file
+                                        maxCount={3} // Restrict to single file
                                         accept=".pdf, .doc, .docx, .xls, .xlsx, .jpg, .jpeg, .png" // Only accept PDF files
                                         onRemove={(file) => {
                                             setFileList((prevList) => prevList.filter((item) => item.uid !== file.uid));

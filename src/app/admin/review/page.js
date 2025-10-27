@@ -413,15 +413,16 @@ export default function pageReview() {
 
                 const userUID = window.localStorage.getItem('UserUID')
                 const messageCode = await getMessageCodeByUser(userUID)
+                const templateCode = await getTemplateCodeByUid(data.TemplateUID)
 
                 const today = new Date(); // Get the current date and time
-                const currentYear = today.getFullYear(); // Extract the full year
+                const currentYear = today.getFullYear().toString().slice(-2); // Extract the last two digits of the year
                 const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
 
                 if (data.MessageClassification == 1) {
-                    setMessageNumberDocument(ZeroPad(data.EventNumberKeluar) + data.EventNumberSubKeluar + "-PSPIP-SDK-"+ messageCode +"-"+currentMonth +currentYear)
+                    setMessageNumberDocument(ZeroPad(data.EventNumberKeluar) + data.EventNumberSubKeluar + "-PSPIP"+"-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
                 } else {
-                    setMessageNumberDocument(ZeroPad(data.EventNumberMemo) + data.EventNumberSubMemo + "-PSPIP-SDI-"+ messageCode +"-"+currentMonth +currentYear)
+                    setMessageNumberDocument(ZeroPad(data.EventNumberMemo) + data.EventNumberSubMemo + "-PSPIP-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
                 }
 
                 setContentQR(data.UID)
@@ -910,6 +911,20 @@ export default function pageReview() {
                         Apakah anda yakin untuk menyetujui surat ini untuk dikirimkan  ?
                     </div>
 
+                    <div className="flex space-x-3 mb-5">
+                        <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
+                            onClick={handleCancelApprove}
+                        >
+                            Batal
+                        </button>
+
+                        <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                            onClick={handleFinishApprove}
+                        >
+                            Konfirmasi
+                        </button>
+                    </div>
+
 
                     {
                         currentMessageStatus == 42 ?
@@ -932,19 +947,7 @@ export default function pageReview() {
                     }
 
 
-                    <div className="flex space-x-3">
-                        <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
-                            onClick={handleCancelApprove}
-                        >
-                            Batal
-                        </button>
-
-                        <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
-                            onClick={handleFinishApprove}
-                        >
-                            Konfirmasi
-                        </button>
-                    </div>
+                    
                 </Modal>
 
 

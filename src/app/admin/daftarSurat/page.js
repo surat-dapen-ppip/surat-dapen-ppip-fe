@@ -24,6 +24,17 @@ const ContentTabs = ({
                 dataIndex: 'Title',
             },
             {
+                title: 'Kategori',
+                render: (_, record) => {
+                    return (
+                        <div>
+                            {record.MessageClassification === 1 ? 'Surat Keluar' : ''}
+                            {record.MessageClassification === 2 ? 'Memo Dinas' : ''}
+                        </div>
+                    )
+                }
+            },
+            {
                 title: 'Sifat',
                 dataIndex: 'nature_name',
             },
@@ -40,28 +51,28 @@ const ContentTabs = ({
                 }
             },
             {
-                title:'Action',
-                render:(_, record)=>{
+                title: 'Action',
+                render: (_, record) => {
                     return (
                         <>
-                            <button 
+                            <button
                                 className="text-xs font-semibold px-3 py-1 bg-gray-100 rounded"
-                                onClick={()=>{
-                                    if(isDraft){
-                                        router.push("/admin/draft?uid="+record.UID)
-                                    }else if(isApprove){
-                                        router.push("/admin/approve?uid="+record.UID)
-                                    }else if(isRevised){
-                                        router.push("/admin/revision?uid="+record.UID)
-                                    }else if(isReview){
-                                        router.push("/admin/review?uid="+record.UID)
-                                    }else if(isRejection){
-                                        router.push("/admin/rejection?uid="+record.UID)
-                                    }else{
-                                        router.push("/admin/view?uid="+record.UID)
+                                onClick={() => {
+                                    if (isDraft) {
+                                        router.push("/admin/draft?uid=" + record.UID)
+                                    } else if (isApprove) {
+                                        router.push("/admin/approve?uid=" + record.UID)
+                                    } else if (isRevised) {
+                                        router.push("/admin/revision?uid=" + record.UID)
+                                    } else if (isReview) {
+                                        router.push("/admin/review?uid=" + record.UID)
+                                    } else if (isRejection) {
+                                        router.push("/admin/rejection?uid=" + record.UID)
+                                    } else {
+                                        router.push("/admin/view?uid=" + record.UID)
                                     }
                                 }}
-                            > 
+                            >
                                 Lihat
                             </button>
                         </>
@@ -79,7 +90,7 @@ export default function pageDaftarSurat() {
     const { role, recipientUID, name, fetchCount } = useLayoutContext();
 
     const [selectedKeyTabs, setSelectedKeyTabs] = useState("3")
-    const [userUID, setUserUID ] = useState("")
+    const [userUID, setUserUID] = useState("")
 
     const [cDraft, setCDraft] = useState(0)
     const [cWaitingReview, setCWaitingReview] = useState(0)
@@ -122,63 +133,62 @@ export default function pageDaftarSurat() {
     }
 
     const fetchMessage = async (KeyTabs, userUID) => {
-        const selectedKeyTabs = parseInt(KeyTabs.replace("a",""))
+        const selectedKeyTabs = parseInt(KeyTabs.replace("a", ""))
 
         if (KeyTabs == '3') {
             const response = await getMessagesOnlyUser(selectedKeyTabs, userUID)
             setDataDraft(response.data)
-        }else if(KeyTabs == '41'){
+        } else if (KeyTabs == '41') {
             const response = await getMessagesForDrafterCC(selectedKeyTabs, userUID)
             setDataWaitingReview(response.data)
-        }else if(KeyTabs == '41a'){
+        } else if (KeyTabs == '41a') {
             const response = await getMessagesForReviewer(selectedKeyTabs, userUID)
             setDataNeedReview(response.data)
-        }else if(KeyTabs == '42'){
+        } else if (KeyTabs == '42') {
             const response = await getMessagesForDrafterCC(selectedKeyTabs, userUID)
             setDataWaitingApproval(response.data)
-        }else if(KeyTabs == '42a'){
+        } else if (KeyTabs == '42a') {
             const response = await getMessagesForApprover(selectedKeyTabs, userUID)
             setDataNeedApproval(response.data)
-        }else if(KeyTabs == '2'){
+        } else if (KeyTabs == '2') {
             const response = await getMessagesBothUser(selectedKeyTabs, userUID, 1)
             setDataApproved(response.data)
-        }else if(KeyTabs == '5'){
+        } else if (KeyTabs == '5') {
             const response = await getMessagesOnlyUser(selectedKeyTabs, userUID)
             setDataRevised(response.data)
-        }else if(KeyTabs == '6'){
+        } else if (KeyTabs == '6') {
             const response = await getMessagesBothUser(selectedKeyTabs, userUID)
             setDataRejected(response.data)
-        }else{
+        } else {
             return
         }
-
     }
 
 
-    useEffect(()=>{
-        if(typeof window !== 'undefined'){
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
             const userUID = window.localStorage.getItem('UserUID')
             fetchMessage(selectedKeyTabs, userUID)
             fetchCountDaftar(userUID)
         }
-    },[selectedKeyTabs])
+    }, [selectedKeyTabs])
 
-    useEffect(()=>{
-        if(typeof window !== 'undefined'){
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
             const userUID = window.localStorage.getItem('UserUID')
             fetchCountDaftar(userUID)
         }
-        
-    },[])
 
-    
-    
+    }, [])
+
+
+
 
     const tabsContent = [
         {
             key: '3',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Draft 
+                <h2 className="text-sm font-semibold text-gray-700">Draft
                     ({cDraft})
                 </h2>
             ),
@@ -194,7 +204,7 @@ export default function pageDaftarSurat() {
         {
             key: '41',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Menunggu Review 
+                <h2 className="text-sm font-semibold text-gray-700">Menunggu Review
                     ({cWaitingReview})
                 </h2>
             ),
@@ -209,7 +219,9 @@ export default function pageDaftarSurat() {
         {
             key: '41a',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Membutuhkan Review 
+                <h2 className=
+                    {"text-sm font-semibold" + (cNeedReview > 0 ? " bg-blue-800 text-white py-1 px-2 rounded" : " text-gray-700")}
+                >Membutuhkan Review
                     ({cNeedReview})
                 </h2>
             ),
@@ -225,7 +237,7 @@ export default function pageDaftarSurat() {
         {
             key: '42',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Menunggu Persetujuan 
+                <h2 className="text-sm font-semibold text-gray-700">Menunggu Persetujuan
                     ({cWaitingApproval})
                 </h2>
             ),
@@ -240,7 +252,9 @@ export default function pageDaftarSurat() {
         {
             key: '42a',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Membutuhkan  Persetujuan 
+                <h2 className=
+                    {"text-sm font-semibold" + (cNeedApproval > 0 ? " bg-blue-800 text-white py-1 px-2 rounded" : " text-gray-700")}
+                >Membutuhkan  Persetujuan
                     ({cNeedApproval})
                 </h2>
             ),
@@ -256,7 +270,7 @@ export default function pageDaftarSurat() {
         {
             key: '2',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Disetujui 
+                <h2 className="text-sm font-semibold text-gray-700">Disetujui
                     ({cApproved})
                 </h2>
             ),
@@ -271,7 +285,7 @@ export default function pageDaftarSurat() {
         {
             key: '5',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Direvisi 
+                <h2 className="text-sm font-semibold text-gray-700">Direvisi
                     ({cRevised})
                 </h2>
             ),
@@ -287,7 +301,7 @@ export default function pageDaftarSurat() {
         {
             key: '6',
             label: (
-                <h2 className="text-sm font-semibold text-gray-700">Ditolak 
+                <h2 className="text-sm font-semibold text-gray-700">Ditolak
                     ({cRejected})
                 </h2>
             ),

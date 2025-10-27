@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CryptoJS from 'crypto-js';
-import { getCountHistory, getCountInbox } from '@/services/message';
+import { countMessagesForApprover, countMessagesForReviewer, getCountHistory, getCountInbox } from '@/services/message';
 
 const LayoutContext = createContext();
 
@@ -14,6 +14,7 @@ export const LayoutProvider = ({ children }) => {
   const [name, setName] = useState("");
   const [countInbox, setCountInbox] = useState(0);
   const [countHistory, setCountHistory] = useState(0);
+  const [countDaftarSurat, setCountDaftarSurat] = useState(0);
 
   const fetchCount = async (roleID, recipientUID, classification) => {
     if (typeof window !== 'undefined') {
@@ -21,6 +22,11 @@ export const LayoutProvider = ({ children }) => {
       if (responseCI) {
         setCountInbox(responseCI.data);
       }
+
+      const rNeedReview = await countMessagesForReviewer(41, recipientUID)
+      const rNeedApprove = await countMessagesForApprover(42, recipientUID)
+      setCountDaftarSurat((rNeedReview.data || 0) + (rNeedApprove.data || 0));
+
 
       if (roleID == 0) {
         const responseCH = await getCountHistory(recipientUID, "true");
@@ -87,6 +93,7 @@ export const LayoutProvider = ({ children }) => {
         name,
         countInbox,
         countHistory,
+        countDaftarSurat,
         fetchCount,
         handleLogout,
         handleAuth,
