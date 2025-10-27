@@ -10,54 +10,67 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      # --- Stage 0: Checkout Repo di GitHub Actions ---
+      - name: Checkout repository
         uses: actions/checkout@v3
 
+      # --- Stage 1: Setup SSH ---
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # --- Stage 1: Clone or Pull Project ---
+      # --- Stage 2: Pull/Clone Project di Server ---
       - name: Clone or Pull Project
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
             PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
 
-            # kalau belum ada repo git → clone baru
             if [ ! -d "$PROJECT_DIR/.git" ]; then
+              echo "🚀 Cloning new repo..."
               rm -rf $PROJECT_DIR
               git clone git@github.com:surat-dapen-ppip/surat-dapen-ppip-fe.git $PROJECT_DIR
             fi
 
             cd $PROJECT_DIR
-
-            # update repo ke branch main
+            echo "📦 Pulling latest changes..."
             git fetch origin main
             git reset --hard origin/main
           EOF
 
-      # --- Stage 2: Upload ENV ---
-      - name: Upload .env to VPS
+      # --- Stage 3: Upload .env ke Server ---
+      - name: Upload .env to Server
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
+          echo "🧩 Creating .env file..."
           echo "$ENV_FILE" | sed 's/ *= */=/' > .env
-          scp -o StrictHostKeyChecking=no .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
+          scp -o StrictHostKeyChecking=no .env \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/doaibub25/surat-dapen-ppip-fe/.env
 
-      # --- Stage 3: Build & Run Docker ---
-      - name: Build & Run Docker
+      # --- Stage 4: Build & Deploy Docker di Server ---
+      - name: Build and Run Docker
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
             PROJECT_DIR=/home/doaibub25/surat-dapen-ppip-fe
             cd $PROJECT_DIR
 
+            echo "🧹 Cleaning old container if exists..."
+            docker rm -f surat-dapen-ppip-fe 2>/dev/null || true
+
+            echo "🧼 Cleaning old cache..."
+            sudo chown -R $USER:$USER $PROJECT_DIR || true
+            sudo rm -rf .next node_modules || true
+
+            echo "🏗️ Building new Docker image..."
             docker build -t surat-dapen-ppip-fe:latest .
 
-            docker rm -f surat-dapen-ppip-fe || true
+            echo "🚀 Starting new container..."
             docker run -d --name surat-dapen-ppip-fe \
               --env-file .env \
               -p 3000:3000 \
               --restart always \
               surat-dapen-ppip-fe:latest
+
+            echo "✅ Deployment finished!"
           EOF
