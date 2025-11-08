@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import { Form, message, Select, Spin, Upload, Row, Col } from 'antd';
+import { Form, message, Select, Spin, Upload, Row, Col, Button } from 'antd';
 import { Suspense, useEffect, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -15,6 +15,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import moment from 'moment';
 import { getMediaByUid } from '@/services/media';
+import { MdDownload, MdInsertDriveFile } from 'react-icons/md';
 
 const RichEditReadOnlyComponent = dynamic(() => import('@/components/richEditReadOnly'), { ssr: false });
 
@@ -23,17 +24,25 @@ export default function pageDraft() {
     const router = useRouter()
     const [UID, setUID] = useState("");
     const [dataMessage, setDataMessage] = useState()
+    const [isLoadingData, setIsLoadingData] = useState(true)
 
     const { role, recipientUID, name, fetchCount } = useLayoutContext();
     const [FormMessage] = Form.useForm()
 
 
     const fetchMessage = async (uid) => {
-        const response = await getMessageByUid(uid)
-        if (response) {
-            setDataMessage(response.data)
+        try {
+            const response = await getMessageByUid(uid)
+            if (response && response.data) {
+                setDataMessage(response.data)
+                return response.data
+            } else {
+                return null
+            }
+        } catch (error) {
+            console.error("Error fetching message:", error)
+            return null
         }
-        return response.data
     }
 
     const [triggerSave, setTriggerSave] = useState(false)
@@ -56,16 +65,17 @@ export default function pageDraft() {
         }
     }
 
-    const fetchTemplateName = async (typeName) => {
-        const response = await getTemplateNameSurat(typeName);
+    const fetchTemplateName = async (typeName, messageClassification) => {
+        const response = await getTemplateNameSurat(typeName, messageClassification);
         if (response) {
-            setOptionTemplate(response.data.map((item) => {
+            return response.data.map((item) => {
                 return {
                     label: item.TemplateName,
                     value: item.UID
                 }
-            }))
+            })
         }
+        return []
     }
 
     const fetchTemplate = async (uid) => {
@@ -237,53 +247,73 @@ export default function pageDraft() {
     }
 
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
-    const [dataMedia, setDataMedia] = useState()
-    const [downloading, setDownloading] = useState(false)
-    const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+    const [mediaList, setMediaList] = useState([])
+    const [downloadingStates, setDownloadingStates] = useState({})
 
-    const handleDownload = () => {
-        if (pdfBlobUrl) {
+    const handleDownload = async (mediaUID, fileName) => {
+        try {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+            
+            const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                responseType: 'blob',
+            });
+            
+            const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
-            link.href = pdfBlobUrl;
-            link.setAttribute('download', dataMedia.Name);
+            link.href = url;
+            link.setAttribute('download', fileName);
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            message.success(`File ${fileName} berhasil didownload`);
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            message.error(`Gagal mendownload file ${fileName}`);
+        } finally {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
         }
     };
 
-    const fetchMedia = async () => {
-        const response = await getMediaByUid(dataMessage?.ListMedia)
-        if (response) {
-            setDataMedia(response.data)
+    const fetchMediaList = async () => {
+        if (!dataMessage?.ListMedia || dataMessage.ListMedia === "") {
+            setMediaList([]);
+            return;
         }
-    }
 
-    const fetchPdf = async () => {
         try {
-            setDownloading(true);
-            const response = await axios.get(API_URL + "/mediaS3/" + dataMessage?.ListMedia, {
-                responseType: 'blob',
+            // Split UIDs by comma
+            const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
+            
+            // Fetch all media details
+            const mediaPromises = mediaUIDs.map(async (uid) => {
+                try {
+                    const response = await getMediaByUid(uid.trim());
+                    if (response && response.data) {
+                        return response.data;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error(`Error fetching media ${uid}:`, error);
+                    return null;
+                }
             });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            setPdfBlobUrl(url);
+
+            const results = await Promise.all(mediaPromises);
+            const validMedia = results.filter(media => media !== null);
+            setMediaList(validMedia);
         } catch (error) {
-            console.error('Error downloading file:', error);
+            console.error('Error fetching media list:', error);
+            setMediaList([]);
         }
-        setDownloading(false);
     };
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            if (dataMessage?.ListMedia != "") {
-                fetchMedia()
-                fetchPdf();
-            } else {
-                setDataMedia(null)
-                setPdfBlobUrl(null)
-            }
+            fetchMediaList();
         }
-
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dataMessage]);
 
 
@@ -299,65 +329,99 @@ export default function pageDraft() {
             const urlParams = new URLSearchParams(window.location.search);
             const uid = urlParams.get('uid');
 
+            if (!uid) {
+                // No UID provided, redirect to daftarSurat
+                message.info('Surat tidak ditemukan')
+                router.push("/admin/daftarSurat")
+                return
+            }
+
             const handleMessage = async () => {
-                const data = await fetchMessage(uid)
+                try {
+                    setIsLoadingData(true)
+                    const data = await fetchMessage(uid)
 
-                FormMessage.setFieldValue('TypeUID', data.TypeUID)
-                FormMessage.setFieldValue('Title', data.Title)
-                FormMessage.setFieldValue('Date', moment(data.Date))
-                FormMessage.setFieldValue('NatureUID', data.NatureUID)
-                FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
-                FormMessage.setFieldValue('Information', data.Information)
-
-                if (data.MessageClassification == 1) {
-                    FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
-                    FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
-                }else{
-                    FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
-                    FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
-                }
-
-                const responseUser = await getUsers()
-
-                const optionUser = responseUser.data?.map((record) => {
-                    return {
-                        value: record.UID,
-                        label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
+                    if (!data) {
+                        // Data not found, redirect to daftarSurat
+                        message.info('Data surat tidak ditemukan')
+                        router.push("/admin/daftarSurat")
+                        return
                     }
-                })
 
-                const optionTemplateName = [
-                    {label:data.TemplateUID, value:data.TemplateUID}
-                ]
+                    FormMessage.setFieldValue('TypeUID', data.TypeUID)
+                    FormMessage.setFieldValue('Title', data.Title)
+                    FormMessage.setFieldValue('Date', moment(data.Date))
+                    FormMessage.setFieldValue('NatureUID', data.NatureUID)
+                    FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
+                    FormMessage.setFieldValue('Information', data.Information)
 
+                    if (data.MessageClassification == 1) {
+                        FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
+                        FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
+                    }else{
+                        FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
+                        FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
+                    }
 
-                const selectedReviewer = data.ReviewerUID?.split(",").map(uid => 
-                    optionUser.find(option => option.value === uid)
-                )
-                const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
-                const selectedCC = optionUser.filter(option => data.CCUID?.split(",").includes(option.value));
-                const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
-                const selectedTemplate = optionTemplateName.find(option => option.label === data.TemplateUID)
+                    const responseUser = await getUsers()
 
-                FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
-                FormMessage.setFieldValue('ApproverObject', selectedApprover)
-                FormMessage.setFieldValue('CCObject', selectedCC)
-                FormMessage.setFieldValue('RecipientObject', selectedRecipient)
-                FormMessage.setFieldValue('TemplateObject', selectedTemplate)
+                    const optionUser = responseUser.data?.map((record) => {
+                        return {
+                            value: record.UID,
+                            label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
+                        }
+                    })
 
-                setTimeout(() => {
-                    setCurrentDocument(data.MessageContent)
-                }, 300)
+                    const optionTemplateName = await fetchTemplateName(data.TypeUID, data.MessageClassification)
 
-                fetchTemplateName(data.TypeUID)
+                    const selectedReviewer = data.ReviewerUID?.split(",").map(uid => 
+                        optionUser.find(option => option.value === uid)
+                    )
+                    const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
+                    const selectedCC = optionUser.filter(option => data.CCUID?.split(",").includes(option.value));
+                    const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
+                    const selectedTemplate = optionTemplateName.find(option => option.value === data.TemplateUID)
+
+                    FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
+                    FormMessage.setFieldValue('ApproverObject', selectedApprover)
+                    FormMessage.setFieldValue('CCObject', selectedCC)
+                    FormMessage.setFieldValue('RecipientObject', selectedRecipient)
+                    FormMessage.setFieldValue('TemplateObject', selectedTemplate)
+
+                    setTimeout(() => {
+                        setCurrentDocument(data.MessageContent)
+                    }, 300)
+
+                    fetchTemplateName(data.TypeUID)
+                    
+                    setIsLoadingData(false)
+                } catch (error) {
+                    console.error("Error loading message:", error)
+                    message.info('Gagal memuat data surat')
+                    setIsLoadingData(false)
+                    router.push("/admin/daftarSurat")
+                }
             }
 
             handleMessage()
             setUID(uid)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
 
+
+    if (isLoadingData) {
+        return (
+            <main>
+                <div className="flex items-center justify-center min-h-screen">
+                    <Spin size="small" tip="Memuat data surat...">
+                        <div className="p-20"></div>
+                    </Spin>
+                </div>
+            </main>
+        )
+    }
 
     return (
         <main>
@@ -612,21 +676,50 @@ export default function pageDraft() {
                             <Col xs={24} md={12}></Col>
                         </Row>
                     </Form>
-                    <div className='ml-10'>
-                        {pdfBlobUrl ? (
-                            <>
-                                <button
-                                    className={'p-3 text-sm font-semibold ' + (downloading ? "bg-gray-100 text-gray-300" : "bg-blue-100")}
-                                    onClick={handleDownload}
-                                    disabled={downloading}
-                                >
-                                    {downloading ? "Downloading..." : "Download Lampiran"}
-                                </button>
-                            </>
-                        ) : (
-                            <p>{dataMedia == null ? (<>Tidak ada lampiran</>) : (<>Loading File....</>)}</p>
-                        )}
-                    </div>
+                    
+                    {/* Lampiran Section */}
+                    <Row gutter={[24, 16]} className="mt-5">
+                        <Col xs={24} md={12}>
+                            <div className="ml-10">
+                                <h3 className="text-sm font-semibold mb-3 text-gray-700">Lampiran:</h3>
+                                {mediaList.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {mediaList.map((media, index) => (
+                                            <div 
+                                                key={media.UID} 
+                                                className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+                                            >
+                                                <div className="flex items-center space-x-3 flex-1">
+                                                    <MdInsertDriveFile className="text-blue-500 text-xl flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-gray-700 truncate">
+                                                            {media.Name}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            File {index + 1} dari {mediaList.length}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    type="primary"
+                                                    icon={<MdDownload />}
+                                                    onClick={() => handleDownload(media.UID, media.Name)}
+                                                    loading={downloadingStates[media.UID]}
+                                                    disabled={downloadingStates[media.UID]}
+                                                    size="small"
+                                                    className="flex-shrink-0"
+                                                >
+                                                    {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-500 italic">Tidak ada lampiran</p>
+                                )}
+                            </div>
+                        </Col>
+                    </Row>
                 </div>
 
 

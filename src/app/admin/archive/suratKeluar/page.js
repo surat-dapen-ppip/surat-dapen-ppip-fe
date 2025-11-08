@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Viewer, Worker } from '@react-pdf-viewer/core';
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 
 import moment from "moment";
 import { MdClear, MdSearch, MdUpload } from "react-icons/md";
 import { getUsers } from "@/services/users";
-import { GetPositionName } from "@/utils/utility";
 import axios from "axios";
 
 export default function pageHistory() {
@@ -415,6 +416,7 @@ export default function pageHistory() {
                         </Form.Item>
 
                         <div>
+                        <div>
                             {pdfUrl && (
                                 <div style={{ marginTop: '20px' }}>
                                     <h3>PDF Preview:</h3>
@@ -422,7 +424,7 @@ export default function pageHistory() {
                                         <div
                                             style={{
                                                 border: '1px solid rgba(0, 0, 0, 0.3)',
-                                                height: '300px',
+                                                height: '750px',
                                             }}
                                         >
                                             <Viewer fileUrl={pdfUrl} />
@@ -430,6 +432,7 @@ export default function pageHistory() {
                                     </Worker>
                                 </div>
                             )}
+                        </div>
                         </div>
 
                         <div className="flex space-x-3">

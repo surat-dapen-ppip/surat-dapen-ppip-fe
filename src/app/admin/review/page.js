@@ -1,10 +1,10 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import { Form, Input, message, Modal, Select, Spin, Row, Col } from 'antd';
-import { MdArrowBack, MdClearAll, MdOutlineDocumentScanner} from 'react-icons/md';
+import { Button, Form, Input, message, Modal, Select, Spin, Row, Col } from 'antd';
+import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner} from 'react-icons/md';
 import { Suspense, useEffect, useState } from 'react';
-import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
+import { getTemplateCodeByUid, getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import dynamic from 'next/dynamic';
@@ -30,6 +30,7 @@ export default function pageReview() {
     const router = useRouter()
     const [UID, setUID] = useState("");
     const [dataMessage, setDataMessage] = useState()
+    const [isLoadingData, setIsLoadingData] = useState(true)
 
     const [currentMessageStatus, setCurrentMessageStatus] = useState()
     const [messageClassification, setMessageClassification] = useState()
@@ -136,11 +137,18 @@ export default function pageReview() {
     }
 
     const fetchMessage = async (uid) => {
-        const response = await getMessageByUid(uid)
-        if (response) {
-            setDataMessage(response.data)
+        try {
+            const response = await getMessageByUid(uid)
+            if (response && response.data) {
+                setDataMessage(response.data)
+                return response.data
+            } else {
+                return null
+            }
+        } catch (error) {
+            console.error("Error fetching message:", error)
+            return null
         }
-        return response.data
     }
 
     const [triggerSaveReview, setTriggerSaveReview] = useState(false)
@@ -148,6 +156,7 @@ export default function pageReview() {
     const [triggerUpdate, setTriggerUpdate] = useState(false)
     const [triggerReset, setTriggerReset] = useState(false)
     const [triggerSignature, setTriggerSignature] = useState(false)
+    const [isProcessingApproval, setIsProcessingApproval] = useState(false)
 
     const [currentDocument, setCurrentDocument] = useState("")
     const [messageStatus, setMessageStatus] = useState(0)
@@ -158,25 +167,27 @@ export default function pageReview() {
     const fetchTypeName = async () => {
         const response = await getTypeNameSurat();
         if (response) {
-            setOptionType(response.data.map((item) => {
+            return response.data.map((item) => {
                 return {
                     label: item,
                     value: item
                 }
-            }))
+            })
         }
+        return []
     }
 
-    const fetchTemplateName = async (typeName) => {
-        const response = await getTemplateNameSurat(typeName);
+    const fetchTemplateName = async (typeName, messageClassification) => {
+        const response = await getTemplateNameSurat(typeName, messageClassification);
         if (response) {
-            setOptionTemplate(response.data.map((item) => {
+            return response.data.map((item) => {
                 return {
                     label: item.TemplateName,
                     value: item.UID
                 }
-            }))
+            })
         }
+        return []
     }
 
     const fetchTemplate = async (uid) => {
@@ -232,6 +243,7 @@ export default function pageReview() {
                     router.push("/admin/daftarSurat")
                 } catch (error) {
                     message.error("Proses Gagal")
+                    setIsProcessingApproval(false);
                 } finally {
                     setLoadingSubmit(false);
                 }
@@ -239,6 +251,7 @@ export default function pageReview() {
             fetchCount(role, recipientUID, 0)
         } catch (error) {
             message.error("Proses Gagal")
+            setIsProcessingApproval(false);
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
         }
@@ -258,6 +271,7 @@ export default function pageReview() {
                     router.push("/admin/daftarSurat")
                 } catch (error) {
                     message.error("Proses Gagal")
+                    setIsProcessingApproval(false);
                 } finally {
                     setLoadingSubmit(false);
                 }
@@ -265,6 +279,7 @@ export default function pageReview() {
             fetchCount(role, recipientUID, 0)
         } catch (error) {
             message.error("Proses Gagal")
+            setIsProcessingApproval(false);
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
         }
@@ -313,16 +328,28 @@ export default function pageReview() {
     }
 
     const handleFinishApprove = async () => {
-        if (typeof window !== 'undefined') {
-            if (currentMessageStatus == 41) {
-                setTriggerSaveReview(!triggerSaveReview)
-            } else if (currentMessageStatus == 42) {
-                setTriggerSaveApprove(!triggerSaveApprove)
-            } else {
-                message.error('You are not allowed to perform this action')
-            }
+        // Prevent double submit
+        if (isProcessingApproval) {
+            return;
         }
 
+        setIsProcessingApproval(true);
+
+        try {
+            if (typeof window !== 'undefined') {
+                if (currentMessageStatus == 41) {
+                    setTriggerSaveReview(!triggerSaveReview)
+                } else if (currentMessageStatus == 42) {
+                    setTriggerSaveApprove(!triggerSaveApprove)
+                } else {
+                    message.error('You are not allowed to perform this action')
+                    setIsProcessingApproval(false);
+                }
+            }
+        } catch (error) {
+            setIsProcessingApproval(false);
+            message.error('Terjadi kesalahan saat memproses approval');
+        }
     }
 
 
@@ -335,40 +362,66 @@ export default function pageReview() {
     }
 
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
-    const [dataMedia, setDataMedia] = useState()
-    const [downloading, setDownloading] = useState(false)
-    const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+    const [mediaList, setMediaList] = useState([])
+    const [downloadingStates, setDownloadingStates] = useState({})
 
-    const handleDownload = () => {
-        if (pdfBlobUrl) {
+    const handleDownload = async (mediaUID, fileName) => {
+        try {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+            
+            const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                responseType: 'blob',
+            });
+            
+            const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
-            link.href = pdfBlobUrl;
-            link.setAttribute('download', dataMedia.Name);
+            link.href = url;
+            link.setAttribute('download', fileName);
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            message.success(`File ${fileName} berhasil didownload`);
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            message.error(`Gagal mendownload file ${fileName}`);
+        } finally {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
         }
     };
 
-    const fetchMedia = async () => {
-        const response = await getMediaByUid(dataMessage?.ListMedia)
-        if (response) {
-            setDataMedia(response.data)
+    const fetchMediaList = async () => {
+        if (!dataMessage?.ListMedia || dataMessage.ListMedia === "") {
+            setMediaList([]);
+            return;
         }
-    }
 
-    const fetchPdf = async () => {
         try {
-            setDownloading(true);
-            const response = await axios.get(API_URL + "/mediaS3/" + dataMessage?.ListMedia, {
-                responseType: 'blob',
+            // Split UIDs by comma
+            const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
+            
+            // Fetch all media details
+            const mediaPromises = mediaUIDs.map(async (uid) => {
+                try {
+                    const response = await getMediaByUid(uid.trim());
+                    if (response && response.data) {
+                        return response.data;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error(`Error fetching media ${uid}:`, error);
+                    return null;
+                }
             });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            setPdfBlobUrl(url);
+
+            const results = await Promise.all(mediaPromises);
+            const validMedia = results.filter(media => media !== null);
+            setMediaList(validMedia);
         } catch (error) {
-            console.error('Error downloading file:', error);
+            console.error('Error fetching media list:', error);
+            setMediaList([]);
         }
-        setDownloading(false);
     };
 
     const getMessageCodeByUser = async (UID) => {
@@ -381,15 +434,9 @@ export default function pageReview() {
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            if (dataMessage?.ListMedia != "") {
-                fetchMedia()
-                fetchPdf();
-            } else {
-                setDataMedia(null)
-                setPdfBlobUrl(null)
-            }
+            fetchMediaList();
         }
-
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dataMessage]);
 
     useEffect(() => {
@@ -404,87 +451,147 @@ export default function pageReview() {
             const urlParams = new URLSearchParams(window.location.search);
             const uid = urlParams.get('uid');
 
+            if (!uid) {
+                // No UID provided, redirect to daftarSurat
+                message.info('Surat tidak ditemukan')
+                router.push("/admin/daftarSurat")
+                return
+            }
+
             const handleMessage = async () => {
-                const data = await fetchMessage(uid)
+                try {
+                    setIsLoadingData(true)
+                    const data = await fetchMessage(uid)
 
-                setCurrentMessageStatus(data.MessageStatus)
-                setMessageClassification(data.MessageClassification)
-
-
-                const userUID = window.localStorage.getItem('UserUID')
-                const messageCode = await getMessageCodeByUser(userUID)
-                const templateCode = await getTemplateCodeByUid(data.TemplateUID)
-
-                const today = new Date(); // Get the current date and time
-                const currentYear = today.getFullYear().toString().slice(-2); // Extract the last two digits of the year
-                const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
-
-                if (data.MessageClassification == 1) {
-                    setMessageNumberDocument(ZeroPad(data.EventNumberKeluar) + data.EventNumberSubKeluar + "-PSPIP"+"-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
-                } else {
-                    setMessageNumberDocument(ZeroPad(data.EventNumberMemo) + data.EventNumberSubMemo + "-PSPIP-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
-                }
-
-                setContentQR(data.UID)
-
-                FormMessage.setFieldValue('TypeUID', data.TypeUID)
-                FormMessage.setFieldValue('Title', data.Title)
-                FormMessage.setFieldValue('Date', moment(data.Date))
-                FormMessage.setFieldValue('NatureUID', data.NatureUID)
-                FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
-                FormMessage.setFieldValue('Information', data.Information)
-
-                if (data.MessageClassification == 1) {
-                    FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
-                    FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
-                } else {
-                    FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
-                    FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
-                }
-
-                const responseUser = await getUsers()
-
-                const optionUser = responseUser.data?.map((record) => {
-                    return {
-                        value: record.UID,
-                        label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
+                    if (!data) {
+                        // Data not found, redirect to daftarSurat
+                        message.info('Data surat tidak ditemukan')
+                        router.push("/admin/daftarSurat")
+                        return
                     }
-                })
 
-                const optionTemplateName = [
-                    { label: data.TemplateUID, value: data.TemplateUID }
-                ]
+                    setCurrentMessageStatus(data.MessageStatus)
+                    setMessageClassification(data.MessageClassification)
 
 
-                const selectedReviewer = data.ReviewerUID?.split(",").map(uid => 
-                    optionUser.find(option => option.value === uid)
-                )
-                const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
-                const selectedCC = optionUser.filter(option => data.CCUID?.split(",").includes(option.value));
-                const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
-                const selectedTemplate = optionTemplateName.find(option => option.label === data.TemplateUID)
+                    const userUID = window.localStorage.getItem('UserUID')
+                    const messageCode = await getMessageCodeByUser(userUID)
+                    const templateCode = await getTemplateCodeByUid(data.TemplateUID)
 
-                FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
-                FormMessage.setFieldValue('ApproverObject', selectedApprover)
-                FormMessage.setFieldValue('CCObject', selectedCC)
-                FormMessage.setFieldValue('RecipientObject', selectedRecipient)
-                FormMessage.setFieldValue('TemplateObject', selectedTemplate)
+                    const today = new Date(); // Get the current date and time
+                    const currentYear = today.getFullYear().toString().slice(-2); // Extract the last two digits of the year
+                    const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
 
-                setTimeout(() => {
-                    setCurrentDocument(data.MessageContent)
-                }, 300)
+                    if (data.MessageClassification == 1) {
+                        setMessageNumberDocument(ZeroPad(data.EventNumberKeluar) + data.EventNumberSubKeluar + "-PSPIP"+"-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
+                    } else {
+                        setMessageNumberDocument(ZeroPad(data.EventNumberMemo) + data.EventNumberSubMemo + "-PSPIP-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
+                    }
 
-                fetchTemplateName(data.TypeUID)
+                    setContentQR(data.UID)
+
+                    FormMessage.setFieldValue('TypeUID', data.TypeUID)
+                    FormMessage.setFieldValue('Title', data.Title)
+                    FormMessage.setFieldValue('Date', moment(data.Date))
+                    FormMessage.setFieldValue('NatureUID', data.NatureUID)
+                    FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
+                    FormMessage.setFieldValue('Information', data.Information)
+
+                    if (data.MessageClassification == 1) {
+                        FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
+                        FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
+                    } else {
+                        FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
+                        FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
+                    }
+
+                    const responseUser = await getUsers()
+
+                    const optionUser = responseUser.data?.map((record) => {
+                        return {
+                            value: record.UID,
+                            label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
+                        }
+                    })
+
+                    const optionTemplateName = await fetchTemplateName(data.TypeUID, data.MessageClassification)
+
+                    const selectedReviewer = data.ReviewerUID?.split(",").map(uid => 
+                        optionUser.find(option => option.value === uid)
+                    )
+                    const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
+                    const selectedCC = optionUser.filter(option => data.CCUID?.split(",").includes(option.value));
+                    const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
+                    const selectedTemplate = optionTemplateName.find(option => option.value === data.TemplateUID)
+
+                    FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
+                    FormMessage.setFieldValue('ApproverObject', selectedApprover)
+                    FormMessage.setFieldValue('CCObject', selectedCC)
+                    FormMessage.setFieldValue('RecipientObject', selectedRecipient)
+                    FormMessage.setFieldValue('TemplateObject', selectedTemplate)
+
+                    setTimeout(() => {
+                        setCurrentDocument(data.MessageContent)
+                    }, 300)
+
+                    
+                    
+                    setIsLoadingData(false)
+                } catch (error) {
+                    console.error("Error loading message:", error)
+                    message.info('Gagal memuat data surat')
+                    setIsLoadingData(false)
+                    // router.push("/admin/daftarSurat")
+                }
             }
             handleMessage()
             setUID(uid)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
 
 
+    if (isLoadingData) {
+        return (
+            <main>
+                <div className="flex items-center justify-center min-h-screen">
+                    <Spin size="large" tip="Memuat data surat...">
+                        <div className="p-20"></div>
+                    </Spin>
+                </div>
+            </main>
+        )
+    }
+
     return (
         <main>
+            {/* Lock Screen Overlay */}
+            {isProcessingApproval && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[9999]"
+                    style={{ 
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        width: '100vw',
+                        height: '100vh'
+                    }}
+                >
+                    <div className="bg-white rounded-lg p-8 shadow-2xl flex flex-col items-center space-y-4">
+                        <Spin size="large" />
+                        <div className="text-lg font-semibold text-gray-800">
+                            Sedang memproses approval...
+                        </div>
+                        <div className="text-sm text-gray-600">
+                            Mohon tunggu, jangan tutup halaman ini
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <h2 className="text-xl text-gray-700 font-semibold">
                 Review Surat
             </h2>
@@ -773,21 +880,50 @@ export default function pageReview() {
                             <Col xs={24} md={12}></Col>
                         </Row>
                     </Form>
-                    <div className='ml-10'>
-                        {pdfBlobUrl ? (
-                            <>
-                                <button
-                                    className={'p-3 text-sm font-semibold ' + (downloading ? "bg-gray-100 text-gray-300" : "bg-blue-100")}
-                                    onClick={handleDownload}
-                                    disabled={downloading}
-                                >
-                                    {downloading ? "Downloading..." : "Download Lampiran"}
-                                </button>
-                            </>
-                        ) : (
-                            <p>{dataMedia == null ? (<>Tidak ada lampiran</>) : (<>Loading File....</>)}</p>
-                        )}
-                    </div>
+                    
+                    {/* Lampiran Section */}
+                    <Row gutter={[24, 16]} className="mt-5">
+                        <Col xs={24} md={12}>
+                            <div className="ml-10">
+                                <h3 className="text-sm font-semibold mb-3 text-gray-700">Lampiran:</h3>
+                                {mediaList.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {mediaList.map((media, index) => (
+                                            <div 
+                                                key={media.UID} 
+                                                className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+                                            >
+                                                <div className="flex items-center space-x-3 flex-1">
+                                                    <MdInsertDriveFile className="text-blue-500 text-xl flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-gray-700 truncate">
+                                                            {media.Name}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            File {index + 1} dari {mediaList.length}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    type="primary"
+                                                    icon={<MdDownload />}
+                                                    onClick={() => handleDownload(media.UID, media.Name)}
+                                                    loading={downloadingStates[media.UID]}
+                                                    disabled={downloadingStates[media.UID]}
+                                                    size="small"
+                                                    className="flex-shrink-0"
+                                                >
+                                                    {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-500 italic">Tidak ada lampiran</p>
+                                )}
+                            </div>
+                        </Col>
+                    </Row>
                 </div>
 
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
@@ -851,6 +987,7 @@ export default function pageReview() {
                     footer={false}
                     onCancel={handleCancelApprove}
                     maskClosable={false}
+                    closable={!isProcessingApproval}
                     width={currentMessageStatus == 42 ? 1200 : 800}
                     style={{
                         top: '10px'
@@ -884,14 +1021,17 @@ export default function pageReview() {
                     <div className="flex space-x-3">
                         <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
                             onClick={handleCancelApprove}
+                            disabled={isProcessingApproval}
                         >
                             Batal
                         </button>
 
-                        <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                        <button 
+                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${isProcessingApproval ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleFinishApprove}
+                            disabled={isProcessingApproval}
                         >
-                            Konfirmasi
+                            {isProcessingApproval ? 'Memproses...' : 'Konfirmasi'}
                         </button>
                     </div>
                 </Modal>
@@ -902,6 +1042,7 @@ export default function pageReview() {
                     footer={false}
                     onCancel={handleCancelApprove}
                     maskClosable={false}
+                    closable={!isProcessingApproval}
                     width={currentMessageStatus == 42 ? 1200 : 800}
                     style={{
                         top: '10px'
@@ -914,14 +1055,17 @@ export default function pageReview() {
                     <div className="flex space-x-3 mb-5">
                         <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
                             onClick={handleCancelApprove}
+                            disabled={isProcessingApproval}
                         >
                             Batal
                         </button>
 
-                        <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                        <button 
+                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${isProcessingApproval ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleFinishApprove}
+                            disabled={isProcessingApproval}
                         >
-                            Konfirmasi
+                            {isProcessingApproval ? 'Memproses...' : 'Konfirmasi'}
                         </button>
                     </div>
 

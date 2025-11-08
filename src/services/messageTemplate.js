@@ -40,9 +40,9 @@ export const getTemplateNameSurat = async (typeName, messageClassification) => {
 export const getTemplateCodeByUid = async (templateUID) => {
   try {
     const response = await axiosInstance.get(`/messageTemplates/code/${templateUID}`);
-    return response.data;
+    return response.data.data || "";
   } catch (error) {
-    throw error.response?.data || error;
+    return ""
   }
 };
 

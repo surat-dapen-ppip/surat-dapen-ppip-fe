@@ -78,8 +78,23 @@ export default function pageSuratMasuk() {
 
     // Handle file selection and validation
     const handleChange = ({ fileList }) => {
+        // Check if fileList is empty (file was removed/cleared)
+        if (fileList.length === 0) {
+            // Clean up the object URL to avoid memory leaks
+            if (pdfUrl) {
+                URL.revokeObjectURL(pdfUrl);
+            }
+            setFileList([]);
+            setPdfUrl(null);
+            return;
+        }
+
         const file = fileList[0]?.originFileObj;
         if (file) {
+            // Clean up previous URL if it exists
+            if (pdfUrl) {
+                URL.revokeObjectURL(pdfUrl);
+            }
             setFileList(fileList.slice(-1)); // Only keep the last file (single file upload)
             const fileUrl = URL.createObjectURL(file); // Create a URL for the PDF preview
             setPdfUrl(fileUrl);

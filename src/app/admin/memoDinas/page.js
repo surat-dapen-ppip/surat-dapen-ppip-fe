@@ -19,7 +19,7 @@ import axios from 'axios';
 const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
 
 
-export default function pageSuratKeluar() {
+export default function pageMemoDinas() {
     const router = useRouter()
     const { role, recipientUID, name, fetchCount } = useLayoutContext();
     const [FormMessage] = Form.useForm()
@@ -45,19 +45,23 @@ export default function pageSuratKeluar() {
     }
 
     const handleConfirmSubmit = () => {
+        if (isProcessing) return; // Prevent double submission
+        setIsModalSubmitOpen(false)
+        setIsProcessing(true)
         setMessageStatus(41)
         setTimeout(() => {
             FormMessage.submit()
         }, 500)
-        setIsModalSubmitOpen(false)
     }
 
     const handleConfirmDraft = () => {
+        if (isProcessing) return; // Prevent double submission
+        setIsModalDraftOpen(false)
+        setIsProcessing(true)
         setMessageStatus(3)
         setTimeout(() => {
             FormMessage.submit()
         }, 500)
-        setIsModalDraftOpen(false)
     }
 
 
@@ -78,6 +82,7 @@ export default function pageSuratKeluar() {
     const [triggerReset, setTriggerReset] = useState(false)
     const [currentDocument, setCurrentDocument] = useState("")
     const [messageStatus, setMessageStatus] = useState(0)
+    const [isProcessing, setIsProcessing] = useState(false)
 
     const [optionType, setOptionType] = useState([])
     const [optionTemplate, setOptionTemplate] = useState([])
@@ -147,6 +152,7 @@ export default function pageSuratKeluar() {
     }
 
     const handleOnSaveComplete = async (content) => {
+        if (isProcessing === false) return; // Only execute if processing flag is set
         setLoadingSubmit(true); // Start loading spinner
         let data = FormMessage.getFieldsValue()
         let date = GetCurrentDateInISOFormat()
@@ -174,18 +180,18 @@ export default function pageSuratKeluar() {
 
         data.MessageClassification = 2
         data.MessageStatus = messageStatus
-        data.TemplateUID = data?.TemplateObject?.label
+        data.TemplateUID = data?.TemplateObject?.value
 
         data.Drafter = name
         data.DrafterUID = recipientUID
 
-        data.Approver = data.ApproverObject.label
-        data.ApproverUID = data.ApproverObject.value
+        data.Approver = data.ApproverObject?.label
+        data.ApproverUID = data.ApproverObject?.value
 
-        data.Reviewer = data.ReviewerObject.label
-        data.ReviewerUID = data.ReviewerObject.value
+        data.Reviewer = data.ReviewerObject?.label
+        data.ReviewerUID = data.ReviewerObject?.value
 
-        data.RecipientObject.forEach(item => {
+        data.RecipientObject?.forEach(item => {
             listRecipient.push(item.label)
             listRecipientUID.push(item.value)
         });
@@ -200,12 +206,8 @@ export default function pageSuratKeluar() {
         data.CCUID = listCCUID.join(',');
 
         try {
-            const media = await handleUploadFile()
-            let mediaUID = ""
-            if (media != null) {
-                mediaUID = media.data.UID
-            }
-            data.ListMedia = mediaUID
+            const mediaUIDs = await handleUploadFile()
+            data.ListMedia = mediaUIDs || ""
 
             await createMessage(data)
             setFileList([])
@@ -219,6 +221,7 @@ export default function pageSuratKeluar() {
             message.error("Proses Gagal")
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
+            setIsProcessing(false); // Reset processing flag
         }
         setTriggerSave(!triggerSave)
     }
@@ -232,23 +235,27 @@ export default function pageSuratKeluar() {
             return null
         }
 
-        // Create a FormData object to hold the file
-        const formData = new FormData();
-        formData.append('file', fileList[0].originFileObj); // The file to upload
-
         try {
-            // Make a POST request to your Go backend
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
+            // Upload all files in parallel
+            const uploadPromises = fileList.map(async (file) => {
+                const formData = new FormData();
+                formData.append('file', file.originFileObj);
+                
+                const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                });
+                return response.data?.data?.UID;
             });
 
-            // Success response
-            message.success('Attachment uploaded successfully');
-            return response.data
+            const uids = await Promise.all(uploadPromises);
+            message.success(`${fileList.length} file berhasil diupload`);
+            
+            // Return comma-separated UIDs
+            return uids.join(',');
         } catch (error) {
-            message.error('Failed to upload Attachment');
+            message.error('Gagal mengupload file');
             throw error;
         }
     };
@@ -256,9 +263,11 @@ export default function pageSuratKeluar() {
 
     // Handle file selection and validation
     const handleChangeFile = ({ fileList }) => {
-        const file = fileList[0]?.originFileObj;
-        if (file) {
-            setFileList(fileList.slice(-1)); // Only keep the last file (single file upload)
+        if (fileList.length > 3) {
+            message.warning('Maksimal 3 file yang dapat diupload');
+            setFileList(fileList.slice(0, 3));
+        } else {
+            setFileList(fileList);
         }
     };
 
@@ -342,8 +351,13 @@ export default function pageSuratKeluar() {
     return (
         <main>
             <div className="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 hover:bg-yellow-100 text-yellow-400 cursor-pointer shadow-md"
-                    onClick={handleDraft}
+                <div 
+                    className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 text-yellow-400 shadow-md ${
+                        (isProcessing || loadingSubmit) 
+                            ? 'opacity-50 cursor-not-allowed' 
+                            : 'hover:bg-yellow-100 cursor-pointer'
+                    }`}
+                    onClick={(isProcessing || loadingSubmit) ? undefined : handleDraft}
                 >
                     <MdDrafts className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -351,8 +365,13 @@ export default function pageSuratKeluar() {
                     </div>
                 </div>
 
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 hover:bg-red-100 text-red-400 cursor-pointer shadow-md"
-                    onClick={handleReset}
+                <div 
+                    className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 text-red-400 shadow-md ${
+                        (isProcessing || loadingSubmit) 
+                            ? 'opacity-50 cursor-not-allowed' 
+                            : 'hover:bg-red-100 cursor-pointer'
+                    }`}
+                    onClick={(isProcessing || loadingSubmit) ? undefined : handleReset}
                 >
                     <MdClear className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -360,8 +379,13 @@ export default function pageSuratKeluar() {
                     </div>
                 </div>
 
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 hover:bg-green-100 text-green-400 cursor-pointer shadow-md"
-                    onClick={handleSubmit}
+                <div 
+                    className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 text-green-400 shadow-md ${
+                        (isProcessing || loadingSubmit) 
+                            ? 'opacity-50 cursor-not-allowed' 
+                            : 'hover:bg-green-100 cursor-pointer'
+                    }`}
+                    onClick={(isProcessing || loadingSubmit) ? undefined : handleSubmit}
                 >
                     <MdOutlineDocumentScanner className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -628,13 +652,14 @@ export default function pageSuratKeluar() {
                                             fileList={fileList}
                                             onChange={handleChangeFile}
                                             beforeUpload={beforeUpload}
-                                            maxCount={1} // Restrict to single file
+                                            maxCount={3} // Restrict to 3 files maximum
+                                            multiple={true} // Enable multiple file selection
                                             accept=".pdf, .doc, .docx, .xls, .xlsx, .jpg, .jpeg, .png"
                                             onRemove={(file) => {
                                                 setFileList((prevList) => prevList.filter((item) => item.uid !== file.uid));
                                             }}
                                         >
-                                            <Button icon={<MdUpload />}>Pilih File</Button>
+                                            <Button icon={<MdUpload />}>Pilih File (Maks. 3)</Button>
                                         </Upload>
                                     </Form.Item>
                                 </Col>
@@ -666,6 +691,7 @@ export default function pageSuratKeluar() {
                         footer={false}
                         onCancel={handleCancelSubmit}
                         maskClosable={false}
+                        closable={!isProcessing}
                     >
                         <div className='font-semibold text-gray-700 mb-5 mt-5'>
                             Apakah anda yakin untuk mengirim surat ini ?
@@ -673,14 +699,18 @@ export default function pageSuratKeluar() {
 
 
                         <div className="flex space-x-3">
-                            <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
+                            <button 
+                                className="flex-1 bg-red-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                 onClick={handleCancelSubmit}
+                                disabled={isProcessing || loadingSubmit}
                             >
                                 Batal
                             </button>
 
-                            <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                            <button 
+                                className="flex-1 bg-green-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                 onClick={handleConfirmSubmit}
+                                disabled={isProcessing || loadingSubmit}
                             >
                                 Simpan
                             </button>
@@ -721,6 +751,7 @@ export default function pageSuratKeluar() {
                         footer={false}
                         onCancel={handleCancelDraft}
                         maskClosable={false}
+                        closable={!isProcessing}
                     >
                         <div className='font-semibold text-gray-700 mb-5 mt-5'>
                             Apakah anda yakin untuk menyimpan surat ini sebagai draft?
@@ -728,14 +759,18 @@ export default function pageSuratKeluar() {
 
 
                         <div className="flex space-x-3">
-                            <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
+                            <button 
+                                className="flex-1 bg-red-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                 onClick={handleCancelDraft}
+                                disabled={isProcessing || loadingSubmit}
                             >
                                 Batal
                             </button>
 
-                            <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                            <button 
+                                className="flex-1 bg-green-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                 onClick={handleConfirmDraft}
+                                disabled={isProcessing || loadingSubmit}
                             >
                                 Simpan Draft
                             </button>

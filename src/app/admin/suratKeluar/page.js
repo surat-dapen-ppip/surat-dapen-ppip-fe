@@ -175,7 +175,7 @@ export default function pageSuratKeluar() {
 
         data.MessageClassification = 1
         data.MessageStatus = messageStatus
-        data.TemplateUID = data?.TemplateObject?.label
+        data.TemplateUID = data?.TemplateObject?.value
 
         data.Drafter = name
         data.DrafterUID = recipientUID
@@ -205,12 +205,10 @@ export default function pageSuratKeluar() {
         data.ReviewerUID = listReviewerUID.join(',');
 
         try {
-            const media = await handleUploadFile()
-            let mediaUID = ""
-            if (media != null) {
-                mediaUID = media.data.UID
-            }
-            data.ListMedia = mediaUID
+            const mediaUIDs = await handleUploadFile()
+
+            console.log(mediaUIDs)
+            data.ListMedia = mediaUIDs
 
             await createMessage(data)
             setFileList([])
@@ -236,23 +234,30 @@ export default function pageSuratKeluar() {
             return null
         }
 
-        // Create a FormData object to hold the file
-        const formData = new FormData();
-        formData.append('file', fileList[0].originFileObj); // The file to upload
-
         try {
-            // Make a POST request to your Go backend
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
+            const uploadPromises = fileList.map(async (file) => {
+                // Create a FormData object to hold the file
+                const formData = new FormData();
+                formData.append('file', file.originFileObj); // The file to upload
+
+                // Make a POST request to your Go backend
+                const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                });
+
+                return response.data?.data?.UID;
             });
 
-            // Success response
-            message.success('Attachment uploaded successfully');
-            return response.data
+            // Wait for all uploads to complete
+            
+            const uids = await Promise.all(uploadPromises);
+
+            console.log('im from handle upload',uids)
+            return uids.join(',');
         } catch (error) {
-            message.error('Failed to upload Attachment');
+            message.error('Gagal mengupload file');
             throw error;
         }
     };
@@ -260,9 +265,12 @@ export default function pageSuratKeluar() {
 
     // Handle file selection and validation
     const handleChangeFile = ({ fileList }) => {
-        const file = fileList[0]?.originFileObj;
-        if (file) {
-            setFileList(fileList.slice(-1)); // Only keep the last file (single file upload)
+        // Limit to maximum 3 files
+        if (fileList.length > 3) {
+            message.warning('Maksimal 3 file yang dapat diupload');
+            setFileList(fileList.slice(0, 3));
+        } else {
+            setFileList(fileList);
         }
     };
 
@@ -629,13 +637,14 @@ export default function pageSuratKeluar() {
                                             fileList={fileList}
                                             onChange={handleChangeFile}
                                             beforeUpload={beforeUpload}
-                                            maxCount={1} // Restrict to single file
+                                            maxCount={3} // Restrict to 3 files maximum
+                                            multiple={true} // Enable multiple file selection
                                             accept=".pdf, .doc, .docx, .xls, .xlsx, .jpg, .jpeg, .png"
                                             onRemove={(file) => {
                                                 setFileList((prevList) => prevList.filter((item) => item.uid !== file.uid));
                                             }}
                                         >
-                                            <Button icon={<MdUpload />}>Pilih File</Button>
+                                            <Button icon={<MdUpload />}>Pilih File (Maks. 3)</Button>
                                         </Upload>
                                     </Form.Item>
                                 </Col>

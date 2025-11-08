@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import {Form, message, Modal, Select, Spin, Table, Tabs, Row, Col} from 'antd';
-import {MdClear, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn } from 'react-icons/md';
+import {Button, Form, message, Modal, Select, Spin, Table, Tabs, Row, Col} from 'antd';
+import {MdClear, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn } from 'react-icons/md';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -19,6 +19,8 @@ import { getMediaByUid } from '@/services/media';
 import Draggable from 'react-draggable';
 import { createMessageEvent, getMessageEvents } from '@/services/messageEvent';
 import CryptoJS from 'crypto-js';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 // import PdfViewer from '@/components/pdfViewer';
 
 const RichEditReadOnlyComponent = dynamic(() => import('@/components/richEditReadOnly'), { ssr: false });
@@ -61,9 +63,8 @@ export default function pageDetailSuratKeluar() {
 
 
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
-    const [dataMedia, setDataMedia] = useState()
-    const [downloading, setDownloading] = useState(false)
-    const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+    const [mediaList, setMediaList] = useState([])
+    const [downloadingStates, setDownloadingStates] = useState({})
 
     const onStart = (_event, uiData) => {
         const { clientWidth, clientHeight } = window.document.documentElement;
@@ -163,49 +164,159 @@ export default function pageDetailSuratKeluar() {
         }
     }
 
-    const handleDownload = () => {
-        if (pdfBlobUrl) {
-            const link = document.createElement('a');
-            link.href = pdfBlobUrl;
-            link.setAttribute('download', dataMedia.Name);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode.removeChild(link);
+    const handleDownload = async (mediaUID, fileName) => {
+        try {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+            
+            const ext = fileName.split('.').pop()?.toLowerCase();
+
+            if (ext === 'pdf') {
+                if (typeof window === 'undefined') return;
+
+                const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                    responseType: 'blob',
+                });
+
+                const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
+                const fontBytes = await fetch(fontUrl).then((res) => res.arrayBuffer());
+                const pdfBytes = await response.data.arrayBuffer();
+
+                const pdfDoc = await PDFDocument.load(pdfBytes);
+                pdfDoc.registerFontkit(fontkit);
+                const customFont = await pdfDoc.embedFont(fontBytes);
+
+                const pages = pdfDoc.getPages();
+                const textSize = 10;
+                const borderPadding = 10;
+                const username = window.localStorage.getItem('Name');
+
+                const watermarkText = [
+                    "",
+                    "Dana Pensiun PPIP",
+                    "Downloaded by:",
+                    username,
+                ];
+
+                pages.forEach((page) => {
+                    const { width, height } = page.getSize();
+                    const boxWidth = 200;
+                    const boxHeight = watermarkText.length * (textSize + 5) + borderPadding * 2;
+                    const boxX = 100;
+                    const boxY = height - 100;
+
+                    page.drawRectangle({
+                        x: boxX,
+                        y: boxY,
+                        width: boxWidth,
+                        height: boxHeight,
+                        borderWidth: 1,
+                        borderColor: rgb(1, 0, 0),
+                        opacity: 0.4,
+                        rotate: degrees(5)
+                    });
+
+                    page.drawText("CONFIDENTAL DOCUMENT", {
+                        x: boxX + borderPadding,
+                        y: boxY + boxHeight - borderPadding - textSize * (0 + 1),
+                        size: 12,
+                        font: customFont,
+                        color: rgb(1, 0, 0),
+                        opacity: 0.4,
+                        rotate: degrees(5)
+                    });
+
+                    watermarkText.forEach((line, index) => {
+                        page.drawText(line || '', {
+                            x: boxX + borderPadding,
+                            y: boxY + boxHeight - borderPadding - textSize * (index + 2),
+                            size: textSize,
+                            font: customFont,
+                            color: rgb(1, 0, 0),
+                            opacity: 0.4,
+                            rotate: degrees(5)
+                        });
+                    });
+                });
+
+                const modifiedPdfBytes = await pdfDoc.save();
+                const modifiedPdfBlob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+                const modifiedPdfUrl = window.URL.createObjectURL(modifiedPdfBlob);
+
+                const link = document.createElement('a');
+                link.href = modifiedPdfUrl;
+                link.setAttribute('download', fileName || 'document.pdf');
+                document.body.appendChild(link);
+                link.click();
+                link.parentNode?.removeChild(link);
+
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(modifiedPdfUrl);
+                }, 1000);
+
+                message.success(`File ${fileName} berhasil didownload`);
+            } else {
+                // Non-PDF fallback
+                const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                    responseType: 'blob',
+                });
+                
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', fileName);
+                document.body.appendChild(link);
+                link.click();
+                link.parentNode.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                
+                message.success(`File ${fileName} berhasil didownload`);
+            }
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            message.error(`Gagal mendownload file ${fileName}`);
+        } finally {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
         }
     };
 
-    const fetchMedia = async () => {
-        const response = await getMediaByUid(dataMessage?.ListMedia)
-        if (response) {
-            setDataMedia(response.data)
+    const fetchMediaList = async () => {
+        if (!dataMessage?.ListMedia || dataMessage.ListMedia === "") {
+            setMediaList([]);
+            return;
         }
-    }
 
-    const fetchPdf = async () => {
         try {
-            setDownloading(true);
-            const response = await axios.get(API_URL + "/mediaS3/" + dataMessage?.ListMedia, {
-                responseType: 'blob',
+            // Split UIDs by comma
+            const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
+            
+            // Fetch all media details
+            const mediaPromises = mediaUIDs.map(async (uid) => {
+                try {
+                    const response = await getMediaByUid(uid.trim());
+                    if (response && response.data) {
+                        return response.data;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error(`Error fetching media ${uid}:`, error);
+                    return null;
+                }
             });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            setPdfBlobUrl(url);
+
+            const results = await Promise.all(mediaPromises);
+            const validMedia = results.filter(media => media !== null);
+            setMediaList(validMedia);
         } catch (error) {
-            console.error('Error downloading file:', error);
+            console.error('Error fetching media list:', error);
+            setMediaList([]);
         }
-        setDownloading(false);
     };
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            if (dataMessage?.ListMedia != "") {
-                fetchMedia()
-                fetchPdf();
-            } else {
-                setDataMedia(null)
-                setPdfBlobUrl(null)
-            }
+            fetchMediaList();
         }
-
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dataMessage]);
 
     const handleReject = () => { setIsModalRejectOpen(true) }
@@ -296,6 +407,7 @@ export default function pageDetailSuratKeluar() {
             handleMessage()
             setUID(uid)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
 
@@ -637,24 +749,50 @@ export default function pageDetailSuratKeluar() {
                                 <Col xs={24} md={12}></Col>
                             </Row>
                         </Form>
-                        <div className='ml-10'>
-                            {pdfBlobUrl ? (
-                                <>
-                                    <button
-                                        className={'p-3 text-sm font-semibold ' + (downloading ? "bg-gray-100 text-gray-300" : "bg-blue-100")}
-                                        onClick={handleDownload}
-                                        disabled={downloading}
-                                    >
-                                        {downloading ? "Downloading..." : "Download Lampiran"}
-                                    </button>
-                                    <div className="mt-4">
-                                        {/* <PdfViewer fileUrl={pdfBlobUrl} /> */}
-                                    </div>
-                                </>
-                            ) : (
-                                <p>{dataMedia == null ? (<>Tidak ada lampiran</>) : (<>Loading File....</>)}</p>
-                            )}
-                        </div>
+                        
+                        {/* Lampiran Section */}
+                        <Row gutter={[24, 16]} className="mt-5">
+                            <Col xs={24} md={12}>
+                                <div className="ml-10">
+                                    <h3 className="text-sm font-semibold mb-3 text-gray-700">Lampiran:</h3>
+                                    {mediaList.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {mediaList.map((media, index) => (
+                                                <div 
+                                                    key={media.UID} 
+                                                    className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+                                                >
+                                                    <div className="flex items-center space-x-3 flex-1">
+                                                        <MdInsertDriveFile className="text-blue-500 text-xl flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium text-gray-700 truncate">
+                                                                {media.Name}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">
+                                                                File {index + 1} dari {mediaList.length}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<MdDownload />}
+                                                        onClick={() => handleDownload(media.UID, media.Name)}
+                                                        loading={downloadingStates[media.UID]}
+                                                        disabled={downloadingStates[media.UID]}
+                                                        size="small"
+                                                        className="flex-shrink-0"
+                                                    >
+                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-gray-500 italic">Tidak ada lampiran</p>
+                                    )}
+                                </div>
+                            </Col>
+                        </Row>
                     </div>
 
                     <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">

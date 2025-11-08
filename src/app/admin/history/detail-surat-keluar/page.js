@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import { Form, Select, Table, Tabs, Row, Col } from 'antd';
+import { Button, Form, message, Select, Table, Tabs, Row, Col } from 'antd';
+import { MdDownload, MdInsertDriveFile } from 'react-icons/md';
 import { Suspense, useEffect, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -35,9 +36,8 @@ export default function pageDetailSuratKeluar() {
     const [optionPriority, setOptionPriority] = useState([])
 
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
-    const [dataMedia, setDataMedia] = useState()
-    const [downloading, setDownloading] = useState(false)
-    const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+    const [mediaList, setMediaList] = useState([])
+    const [downloadingStates, setDownloadingStates] = useState({})
 
     const fetchMessage = async (uid) => {
         const response = await getMessageByUid(uid)
@@ -123,49 +123,70 @@ export default function pageDetailSuratKeluar() {
         }
     }
 
-    const handleDownload = () => {
-        if (pdfBlobUrl) {
+    const handleDownload = async (mediaUID, fileName) => {
+        try {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+            
+            const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                responseType: 'blob',
+            });
+            
+            const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
-            link.href = pdfBlobUrl;
-            link.setAttribute('download', dataMedia.Name);
+            link.href = url;
+            link.setAttribute('download', fileName);
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            message.success(`File ${fileName} berhasil didownload`);
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            message.error(`Gagal mendownload file ${fileName}`);
+        } finally {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
         }
     };
 
-    const fetchMedia = async () => {
-        const response = await getMediaByUid(dataMessage?.ListMedia)
-        if (response) {
-            setDataMedia(response.data)
+    const fetchMediaList = async () => {
+        if (!dataMessage?.ListMedia || dataMessage.ListMedia === "") {
+            setMediaList([]);
+            return;
         }
-    }
 
-    const fetchPdf = async () => {
         try {
-            setDownloading(true);
-            const response = await axios.get(API_URL + "/mediaS3/" + dataMessage?.ListMedia, {
-                responseType: 'blob',
+            // Split UIDs by comma
+            const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
+            
+            // Fetch all media details
+            const mediaPromises = mediaUIDs.map(async (uid) => {
+                try {
+                    const response = await getMediaByUid(uid.trim());
+                    if (response && response.data) {
+                        return response.data;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error(`Error fetching media ${uid}:`, error);
+                    return null;
+                }
             });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            setPdfBlobUrl(url);
+
+            const results = await Promise.all(mediaPromises);
+            const validMedia = results.filter(media => media !== null);
+            setMediaList(validMedia);
         } catch (error) {
-            console.error('Error downloading file:', error);
+            console.error('Error fetching media list:', error);
+            setMediaList([]);
         }
-        setDownloading(false);
     };
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            if (dataMessage?.ListMedia != "") {
-                fetchMedia()
-                fetchPdf();
-            } else {
-                setDataMedia(null)
-                setPdfBlobUrl(null)
-            }
+            fetchMediaList();
         }
-
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dataMessage]);
 
 
@@ -495,21 +516,50 @@ export default function pageDetailSuratKeluar() {
                             </Row>
 
                         </Form>
-                        <div className='ml-10'>
-                            {pdfBlobUrl ? (
-                                <>
-                                    <button
-                                        className={'p-3 text-sm font-semibold ' + (downloading ? "bg-gray-100 text-gray-300" : "bg-blue-100")}
-                                        onClick={handleDownload}
-                                        disabled={downloading}
-                                    >
-                                        {downloading ? "Downloading..." : "Download Lampiran"}
-                                    </button>
-                                </>
-                            ) : (
-                                <p>{dataMedia == null ? (<>Tidak ada lampiran</>) : (<>Loading File....</>)}</p>
-                            )}
-                        </div>
+                        
+                        {/* Lampiran Section */}
+                        <Row gutter={[24, 16]} className="mt-5">
+                            <Col xs={24} md={12}>
+                                <div className="ml-10">
+                                    <h3 className="text-sm font-semibold mb-3 text-gray-700">Lampiran:</h3>
+                                    {mediaList.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {mediaList.map((media, index) => (
+                                                <div 
+                                                    key={media.UID} 
+                                                    className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+                                                >
+                                                    <div className="flex items-center space-x-3 flex-1">
+                                                        <MdInsertDriveFile className="text-blue-500 text-xl flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium text-gray-700 truncate">
+                                                                {media.Name}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">
+                                                                File {index + 1} dari {mediaList.length}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<MdDownload />}
+                                                        onClick={() => handleDownload(media.UID, media.Name)}
+                                                        loading={downloadingStates[media.UID]}
+                                                        disabled={downloadingStates[media.UID]}
+                                                        size="small"
+                                                        className="flex-shrink-0"
+                                                    >
+                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-gray-500 italic">Tidak ada lampiran</p>
+                                    )}
+                                </div>
+                            </Col>
+                        </Row>
                     </div>
 
                     <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
