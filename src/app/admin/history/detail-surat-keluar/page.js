@@ -66,16 +66,17 @@ export default function pageDetailSuratKeluar() {
         }
     }
 
-    const fetchTemplateName = async (typeName) => {
-        const response = await getTemplateNameSurat(typeName);
+    const fetchTemplateName = async (typeName, messageClassification) => {
+        const response = await getTemplateNameSurat(typeName, messageClassification);
         if (response) {
-            setOptionTemplate(response.data.map((item) => {
+            return response.data.map((item) => {
                 return {
                     label: item.TemplateName,
                     value: item.UID
                 }
-            }))
+            })
         }
+        return []
     }
 
     const fetchTemplate = async (uid) => {
@@ -126,11 +127,11 @@ export default function pageDetailSuratKeluar() {
     const handleDownload = async (mediaUID, fileName) => {
         try {
             setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
-            
+
             const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
                 responseType: 'blob',
             });
-            
+
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -139,7 +140,7 @@ export default function pageDetailSuratKeluar() {
             link.click();
             link.parentNode.removeChild(link);
             window.URL.revokeObjectURL(url);
-            
+
             message.success(`File ${fileName} berhasil didownload`);
         } catch (error) {
             console.error('Error downloading file:', error);
@@ -158,7 +159,7 @@ export default function pageDetailSuratKeluar() {
         try {
             // Split UIDs by comma
             const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
-            
+
             // Fetch all media details
             const mediaPromises = mediaUIDs.map(async (uid) => {
                 try {
@@ -196,7 +197,7 @@ export default function pageDetailSuratKeluar() {
         fetchNature()
         fetchPriority()
         fetchUser()
-        
+
 
         if (typeof window !== 'undefined') {
             // Access query parameters from the URL
@@ -220,10 +221,8 @@ export default function pageDetailSuratKeluar() {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
                 }
-                
-                const responseUser = await getUsers()
-                const responseTemplateName = await getTemplateNameSurat(data.TypeUID)
 
+                const responseUser = await getUsers()
                 const optionUser = responseUser.data?.map((record) => {
                     return {
                         value: record.UID,
@@ -231,17 +230,16 @@ export default function pageDetailSuratKeluar() {
                     }
                 })
 
-                const optionTemplateName = [
-                    { label: data.TemplateUID, value: data.TemplateUID }
-                ]
 
-                const selectedReviewer = data.ReviewerUID?.split(",").map(uid => 
+                const optionTemplateName = await fetchTemplateName(data.TypeUID, data.MessageClassification)
+
+                const selectedReviewer = data.ReviewerUID?.split(",").map(uid =>
                     optionUser.find(option => option.value === uid)
                 )
                 const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
                 const selectedCC = optionUser.filter(option => data.CCUID?.split(",").includes(option.value));
                 const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
-                const selectedTemplate = optionTemplateName.find(option => option.label === data.TemplateUID)
+                const selectedTemplate = optionTemplateName.find(option => option.value === data.TemplateUID)
 
                 FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
                 FormMessage.setFieldValue('ApproverObject', selectedApprover)
@@ -252,8 +250,6 @@ export default function pageDetailSuratKeluar() {
                 setTimeout(() => {
                     setCurrentDocument(data.MessageContent)
                 }, 300)
-
-                fetchTemplateName(data.TypeUID)
             }
 
             handleMessage()
@@ -516,7 +512,7 @@ export default function pageDetailSuratKeluar() {
                             </Row>
 
                         </Form>
-                        
+
                         {/* Lampiran Section */}
                         <Row gutter={[24, 16]} className="mt-5">
                             <Col xs={24} md={12}>
@@ -525,8 +521,8 @@ export default function pageDetailSuratKeluar() {
                                     {mediaList.length > 0 ? (
                                         <div className="space-y-2">
                                             {mediaList.map((media, index) => (
-                                                <div 
-                                                    key={media.UID} 
+                                                <div
+                                                    key={media.UID}
                                                     className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
                                                 >
                                                     <div className="flex items-center space-x-3 flex-1">
@@ -621,7 +617,7 @@ export default function pageDetailSuratKeluar() {
         {
             key: '3',
             label: <h2 className="text-lg font-semibold text-gray-700">History</h2>,
-            children:             <div className="p-6 bg-white shadow-sm rounded mt-3 w-[90%]">
+            children: <div className="p-6 bg-white shadow-sm rounded mt-3 w-[90%]">
                 <Table
                     dataSource={dataMessageEvent}
                     columns={[

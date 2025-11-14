@@ -997,6 +997,24 @@ export default function pageReview() {
                         Apakah anda yakin untuk menyetujui surat ini untuk dikirimkan  ?
                     </div>
 
+
+                    <div className="flex space-x-3">
+                        <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
+                            onClick={handleCancelApprove}
+                            disabled={isProcessingApproval}
+                        >
+                            Batal
+                        </button>
+
+                        <button 
+                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${isProcessingApproval ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onClick={handleFinishApprove}
+                            disabled={isProcessingApproval}
+                        >
+                            {isProcessingApproval ? 'Memproses...' : 'Konfirmasi'}
+                        </button>
+                    </div>
+
                     {
                         currentMessageStatus == 42 ?
                             (
@@ -1016,24 +1034,6 @@ export default function pageReview() {
                             ) :
                             null
                     }
-
-
-                    <div className="flex space-x-3">
-                        <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
-                            onClick={handleCancelApprove}
-                            disabled={isProcessingApproval}
-                        >
-                            Batal
-                        </button>
-
-                        <button 
-                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${isProcessingApproval ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            onClick={handleFinishApprove}
-                            disabled={isProcessingApproval}
-                        >
-                            {isProcessingApproval ? 'Memproses...' : 'Konfirmasi'}
-                        </button>
-                    </div>
                 </Modal>
 
                 <Modal
