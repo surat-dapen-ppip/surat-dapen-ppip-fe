@@ -9,7 +9,7 @@ import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import dynamic from 'next/dynamic';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetEventIDName, GetPositionName, GetSubmitIDName } from '@/utils/utility';
+import { GetEventIDName, GetPositionName, GetSubmitIDName, formatCurrentWIBTimestamp } from '@/utils/utility';
 import { getMessageByUid, updateMessageProccessed } from '@/services/message';
 import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -189,12 +189,15 @@ export default function pageDetailSuratKeluar() {
                 const textSize = 10;
                 const borderPadding = 10;
                 const username = window.localStorage.getItem('Name');
+                const downloadTimestamp = formatCurrentWIBTimestamp();
 
                 const watermarkText = [
                     "",
                     "Dana Pensiun PPIP",
                     "Downloaded by:",
-                    username,
+                    username || '-',
+                    "Downloaded at:",
+                    downloadTimestamp,
                 ];
 
                 pages.forEach((page) => {

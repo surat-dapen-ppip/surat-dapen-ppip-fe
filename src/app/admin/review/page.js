@@ -89,6 +89,9 @@ export default function pageReview() {
 
     const handleBack = () => { setIsModalBackOpen(true) }
     const handleApprove = () => {
+        if (loadingSubmit) {
+            return
+        }
         setTriggerUpdate(!triggerUpdate)
         setLoadingSubmit(true);
         setTimeout(() => {
@@ -121,6 +124,9 @@ export default function pageReview() {
     }
 
     const handleConfirmRevision = () => {
+        if (loadingSubmit) {
+            return
+        }
         setMessageStatus(5)
         setTimeout(() => {
             FormRevision.submit()
@@ -129,11 +135,14 @@ export default function pageReview() {
     }
 
     const handleConfirmRejection = () => {
+        if (loadingSubmit) {
+            return
+        }
         setMessageStatus(6)
         setTimeout(() => {
             FormRejection.submit()
         }, 300)
-        setIsModalRevisionOpen(false)
+        setIsModalRejectOpen(false)
     }
 
     const fetchMessage = async (uid) => {
@@ -156,7 +165,6 @@ export default function pageReview() {
     const [triggerUpdate, setTriggerUpdate] = useState(false)
     const [triggerReset, setTriggerReset] = useState(false)
     const [triggerSignature, setTriggerSignature] = useState(false)
-    const [isProcessingApproval, setIsProcessingApproval] = useState(false)
 
     const [currentDocument, setCurrentDocument] = useState("")
     const [messageStatus, setMessageStatus] = useState(0)
@@ -243,7 +251,6 @@ export default function pageReview() {
                     router.push("/admin/daftarSurat")
                 } catch (error) {
                     message.error("Proses Gagal")
-                    setIsProcessingApproval(false);
                 } finally {
                     setLoadingSubmit(false);
                 }
@@ -251,7 +258,6 @@ export default function pageReview() {
             fetchCount(role, recipientUID, 0)
         } catch (error) {
             message.error("Proses Gagal")
-            setIsProcessingApproval(false);
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
         }
@@ -271,7 +277,6 @@ export default function pageReview() {
                     router.push("/admin/daftarSurat")
                 } catch (error) {
                     message.error("Proses Gagal")
-                    setIsProcessingApproval(false);
                 } finally {
                     setLoadingSubmit(false);
                 }
@@ -279,7 +284,6 @@ export default function pageReview() {
             fetchCount(role, recipientUID, 0)
         } catch (error) {
             message.error("Proses Gagal")
-            setIsProcessingApproval(false);
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
         }
@@ -328,27 +332,25 @@ export default function pageReview() {
     }
 
     const handleFinishApprove = async () => {
-        // Prevent double submit
-        if (isProcessingApproval) {
-            return;
+        if (loadingSubmit) {
+            return
         }
-
-        setIsProcessingApproval(true);
 
         try {
             if (typeof window !== 'undefined') {
                 if (currentMessageStatus == 41) {
+                    setLoadingSubmit(true)
                     setTriggerSaveReview(!triggerSaveReview)
                 } else if (currentMessageStatus == 42) {
+                    setLoadingSubmit(true)
                     setTriggerSaveApprove(!triggerSaveApprove)
                 } else {
                     message.error('You are not allowed to perform this action')
-                    setIsProcessingApproval(false);
                 }
             }
         } catch (error) {
-            setIsProcessingApproval(false);
-            message.error('Terjadi kesalahan saat memproses approval');
+            setLoadingSubmit(false)
+            message.error('Terjadi kesalahan saat memproses approval')
         }
     }
 
@@ -567,7 +569,7 @@ export default function pageReview() {
     return (
         <main>
             {/* Lock Screen Overlay */}
-            {isProcessingApproval && (
+            {loadingSubmit && (isModalApproveMemoOpen || isModalApproveSuratKeluarOpen) && (
                 <div 
                     className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[9999]"
                     style={{ 
@@ -598,8 +600,9 @@ export default function pageReview() {
 
             <Spin spinning={loadingSubmit} tip="Sedang memproses, mohon tunggu...">
                 <div className="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
-                    <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-blue-400 hover:bg-blue-100 text-blue-400 cursor-pointer shadow-md"
-                        onClick={handleBack}
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-blue-400 text-blue-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleBack : undefined}
                     >
                         <MdArrowBack className="mb-2 text-sm" />
                         <div className="text-xs">
@@ -607,8 +610,9 @@ export default function pageReview() {
                         </div>
                     </div>
 
-                    <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 hover:bg-yellow-100 text-yellow-400 cursor-pointer shadow-md"
-                        onClick={handleRevision}
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 text-yellow-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-yellow-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleRevision : undefined}
                     >
                         <MdOutlineDocumentScanner className="mb-2 text-sm" />
                         <div className="text-xs">
@@ -616,8 +620,9 @@ export default function pageReview() {
                         </div>
                     </div>
 
-                    <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 hover:bg-red-100 text-red-400 cursor-pointer shadow-md"
-                        onClick={handleReject}
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 text-red-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleReject : undefined}
                     >
                         <MdClearAll className="mb-2 text-sm" />
                         <div className="text-xs">
@@ -625,8 +630,9 @@ export default function pageReview() {
                         </div>
                     </div>
 
-                    <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 hover:bg-green-100 text-green-400 cursor-pointer shadow-md"
-                        onClick={handleApprove}
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 text-green-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleApprove : undefined}
                     >
                         <MdOutlineDocumentScanner className="mb-2 text-sm" />
                         <div className="text-xs">
@@ -973,8 +979,10 @@ export default function pageReview() {
                             Batal
                         </button>
 
-                        <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                        <button
+                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleConfirmRevision}
+                            disabled={loadingSubmit}
                         >
                             Konfirmasi
                         </button>
@@ -987,7 +995,7 @@ export default function pageReview() {
                     footer={false}
                     onCancel={handleCancelApprove}
                     maskClosable={false}
-                    closable={!isProcessingApproval}
+                    closable={!loadingSubmit}
                     width={currentMessageStatus == 42 ? 1200 : 800}
                     style={{
                         top: '10px'
@@ -1001,17 +1009,17 @@ export default function pageReview() {
                     <div className="flex space-x-3">
                         <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
                             onClick={handleCancelApprove}
-                            disabled={isProcessingApproval}
+                            disabled={loadingSubmit}
                         >
                             Batal
                         </button>
 
                         <button 
-                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${isProcessingApproval ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleFinishApprove}
-                            disabled={isProcessingApproval}
+                            disabled={loadingSubmit}
                         >
-                            {isProcessingApproval ? 'Memproses...' : 'Konfirmasi'}
+                            {loadingSubmit ? 'Memproses...' : 'Konfirmasi'}
                         </button>
                     </div>
 
@@ -1042,7 +1050,7 @@ export default function pageReview() {
                     footer={false}
                     onCancel={handleCancelApprove}
                     maskClosable={false}
-                    closable={!isProcessingApproval}
+                    closable={!loadingSubmit}
                     width={currentMessageStatus == 42 ? 1200 : 800}
                     style={{
                         top: '10px'
@@ -1055,17 +1063,17 @@ export default function pageReview() {
                     <div className="flex space-x-3 mb-5">
                         <button className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
                             onClick={handleCancelApprove}
-                            disabled={isProcessingApproval}
+                            disabled={loadingSubmit}
                         >
                             Batal
                         </button>
 
                         <button 
-                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${isProcessingApproval ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleFinishApprove}
-                            disabled={isProcessingApproval}
+                            disabled={loadingSubmit}
                         >
-                            {isProcessingApproval ? 'Memproses...' : 'Konfirmasi'}
+                            {loadingSubmit ? 'Memproses...' : 'Konfirmasi'}
                         </button>
                     </div>
 
@@ -1125,8 +1133,10 @@ export default function pageReview() {
                             Batal
                         </button>
 
-                        <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                        <button
+                            className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleConfirmRejection}
+                            disabled={loadingSubmit}
                         >
                             Konfirmasi
                         </button>

@@ -38,16 +38,25 @@ export default function pageMemoDinas() {
     const handleCancelSubmit = () => { setIsModalSubmitOpen(false) }
 
     const handleConfirmReset = () => {
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true)
         FormMessage.resetFields()
         setCurrentDocument("")
         setTriggerReset(!triggerReset)
         setIsModalResetOpen(false)
+        setTimeout(() => {
+            setLoadingSubmit(false)
+        }, 300)
     }
 
     const handleConfirmSubmit = () => {
-        if (isProcessing) return; // Prevent double submission
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true)
         setIsModalSubmitOpen(false)
-        setIsProcessing(true)
         setMessageStatus(41)
         setTimeout(() => {
             FormMessage.submit()
@@ -55,9 +64,11 @@ export default function pageMemoDinas() {
     }
 
     const handleConfirmDraft = () => {
-        if (isProcessing) return; // Prevent double submission
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true)
         setIsModalDraftOpen(false)
-        setIsProcessing(true)
         setMessageStatus(3)
         setTimeout(() => {
             FormMessage.submit()
@@ -82,7 +93,6 @@ export default function pageMemoDinas() {
     const [triggerReset, setTriggerReset] = useState(false)
     const [currentDocument, setCurrentDocument] = useState("")
     const [messageStatus, setMessageStatus] = useState(0)
-    const [isProcessing, setIsProcessing] = useState(false)
 
     const [optionType, setOptionType] = useState([])
     const [optionTemplate, setOptionTemplate] = useState([])
@@ -152,8 +162,9 @@ export default function pageMemoDinas() {
     }
 
     const handleOnSaveComplete = async (content) => {
-        if (isProcessing === false) return; // Only execute if processing flag is set
-        setLoadingSubmit(true); // Start loading spinner
+        if (!loadingSubmit) {
+            setLoadingSubmit(true); // Start loading spinner
+        }
         let data = FormMessage.getFieldsValue()
         let date = GetCurrentDateInISOFormat()
 
@@ -221,7 +232,6 @@ export default function pageMemoDinas() {
             message.error("Proses Gagal")
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
-            setIsProcessing(false); // Reset processing flag
         }
         setTriggerSave(!triggerSave)
     }
@@ -303,15 +313,25 @@ export default function pageMemoDinas() {
 
 
     const handleFinishSubmission = async () => {
-        const data = FormMessage.getFieldsValue()
-        const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
-        if (isAvailable) {
-            setTriggerSave(!triggerSave)
-        } else {
-            var counterBefore = data.EventNumber
-            var counterAfter = await fetchCounter()
-            message.warning("Nomor agenda " + counterBefore + " sudah terdaftar, nomor agenda akan di update menjadi " + counterAfter)
+        try {
+            const data = FormMessage.getFieldsValue()
+            const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
+            if (isAvailable) {
+                setTriggerSave(!triggerSave)
+            } else {
+                var counterBefore = data.EventNumber
+                var counterAfter = await fetchCounter()
+                message.warning("Nomor agenda " + counterBefore + " sudah terdaftar, nomor agenda akan di update menjadi " + counterAfter)
+                setLoadingSubmit(false)
+            }
+        } catch (error) {
+            message.error("Terjadi kesalahan saat memvalidasi data")
+            setLoadingSubmit(false)
         }
+    }
+
+    const handleFinishFailed = () => {
+        setLoadingSubmit(false)
     }
 
 
@@ -353,11 +373,11 @@ export default function pageMemoDinas() {
             <div className="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
                 <div 
                     className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 text-yellow-400 shadow-md ${
-                        (isProcessing || loadingSubmit) 
+                        loadingSubmit 
                             ? 'opacity-50 cursor-not-allowed' 
                             : 'hover:bg-yellow-100 cursor-pointer'
                     }`}
-                    onClick={(isProcessing || loadingSubmit) ? undefined : handleDraft}
+                    onClick={!loadingSubmit ? handleDraft : undefined}
                 >
                     <MdDrafts className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -367,11 +387,11 @@ export default function pageMemoDinas() {
 
                 <div 
                     className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 text-red-400 shadow-md ${
-                        (isProcessing || loadingSubmit) 
+                        loadingSubmit 
                             ? 'opacity-50 cursor-not-allowed' 
                             : 'hover:bg-red-100 cursor-pointer'
                     }`}
-                    onClick={(isProcessing || loadingSubmit) ? undefined : handleReset}
+                    onClick={!loadingSubmit ? handleReset : undefined}
                 >
                     <MdClear className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -381,11 +401,11 @@ export default function pageMemoDinas() {
 
                 <div 
                     className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 text-green-400 shadow-md ${
-                        (isProcessing || loadingSubmit) 
+                        loadingSubmit 
                             ? 'opacity-50 cursor-not-allowed' 
                             : 'hover:bg-green-100 cursor-pointer'
                     }`}
-                    onClick={(isProcessing || loadingSubmit) ? undefined : handleSubmit}
+                    onClick={!loadingSubmit ? handleSubmit : undefined}
                 >
                     <MdOutlineDocumentScanner className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -410,6 +430,7 @@ export default function pageMemoDinas() {
                             colon={false}
                             form={FormMessage}
                             onFinish={handleFinishSubmission}
+                            onFinishFailed={handleFinishFailed}
                         >
                             {/* No. Agenda and Tanggal */}
                             <Row gutter={[24, 16]}>
@@ -691,7 +712,6 @@ export default function pageMemoDinas() {
                         footer={false}
                         onCancel={handleCancelSubmit}
                         maskClosable={false}
-                        closable={!isProcessing}
                     >
                         <div className='font-semibold text-gray-700 mb-5 mt-5'>
                             Apakah anda yakin untuk mengirim surat ini ?
@@ -700,17 +720,16 @@ export default function pageMemoDinas() {
 
                         <div className="flex space-x-3">
                             <button 
-                                className="flex-1 bg-red-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
                                 onClick={handleCancelSubmit}
-                                disabled={isProcessing || loadingSubmit}
                             >
                                 Batal
                             </button>
 
                             <button 
-                                className="flex-1 bg-green-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={handleConfirmSubmit}
-                                disabled={isProcessing || loadingSubmit}
+                                disabled={loadingSubmit}
                             >
                                 Simpan
                             </button>
@@ -737,8 +756,10 @@ export default function pageMemoDinas() {
                                 Batal
                             </button>
 
-                            <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                            <button 
+                                className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={handleConfirmReset}
+                                disabled={loadingSubmit}
                             >
                                 Konfirmasi
                             </button>
@@ -751,7 +772,6 @@ export default function pageMemoDinas() {
                         footer={false}
                         onCancel={handleCancelDraft}
                         maskClosable={false}
-                        closable={!isProcessing}
                     >
                         <div className='font-semibold text-gray-700 mb-5 mt-5'>
                             Apakah anda yakin untuk menyimpan surat ini sebagai draft?
@@ -760,17 +780,16 @@ export default function pageMemoDinas() {
 
                         <div className="flex space-x-3">
                             <button 
-                                className="flex-1 bg-red-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex-1 bg-red-500 text-white py-3 rounded font-semibold"
                                 onClick={handleCancelDraft}
-                                disabled={isProcessing || loadingSubmit}
                             >
                                 Batal
                             </button>
 
                             <button 
-                                className="flex-1 bg-green-500 text-white py-3 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={handleConfirmDraft}
-                                disabled={isProcessing || loadingSubmit}
+                                disabled={loadingSubmit}
                             >
                                 Simpan Draft
                             </button>

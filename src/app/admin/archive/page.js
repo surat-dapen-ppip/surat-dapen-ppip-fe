@@ -21,6 +21,7 @@ import { Viewer, Worker } from '@react-pdf-viewer/core';
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 import axios from 'axios';
+import { formatCurrentWIBTimestamp } from '@/utils/utility';
 
 export default function ArchivePage() {
     const [documents, setDocuments] = useState([]);
@@ -270,14 +271,16 @@ export default function ArchivePage() {
             const textSize = 10; // Font size for the text
             const borderPadding = 10; // Padding inside the border box
 
-            const username = window.localStorage.getItem('Name')
-
+            const username = window.localStorage.getItem('Name');
+            const downloadTimestamp = formatCurrentWIBTimestamp();
 
             const watermarkText = [
                 "",
                 "Dana Pensiun PPIP",
                 "Downloaded by:",
-                username,
+                username || '-',
+                "Downloaded at:",
+                downloadTimestamp,
             ];
 
             pages.forEach((page) => {

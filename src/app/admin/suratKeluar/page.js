@@ -38,13 +38,24 @@ export default function pageSuratKeluar() {
     const handleCancelSubmit = () => { setIsModalSubmitOpen(false) }
 
     const handleConfirmReset = () => {
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true)
         FormMessage.resetFields()
         setCurrentDocument("")
         setTriggerReset(!triggerReset)
         setIsModalResetOpen(false)
+        setTimeout(() => {
+            setLoadingSubmit(false)
+        }, 300)
     }
 
     const handleConfirmSubmit = () => {
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true)
         setMessageStatus(41)
         setTimeout(() => {
             FormMessage.submit()
@@ -53,6 +64,10 @@ export default function pageSuratKeluar() {
     }
 
     const handleConfirmDraft = () => {
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true)
         setMessageStatus(3)
         setTimeout(() => {
             FormMessage.submit()
@@ -145,7 +160,9 @@ export default function pageSuratKeluar() {
     }
 
     const handleOnSaveComplete = async (content) => {
-        setLoadingSubmit(true); // Start loading spinner
+        if (!loadingSubmit) {
+            setLoadingSubmit(true); // Start loading spinner
+        }
         let data = FormMessage.getFieldsValue()
         let date = GetCurrentDateInISOFormat()
 
@@ -306,14 +323,24 @@ export default function pageSuratKeluar() {
 
 
     const handleFinishSubmission = async () => {
-        const data = FormMessage.getFieldsValue()
-        const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
-        if (isAvailable) {
-            setTriggerSave(!triggerSave)
-        } else {
-            var counterBefore = data.EventNumber
-            message.warning("Nomor agenda " + counterBefore + " sudah terdaftar, nomor agenda akan di update menjadi " + counterAfter)
+        try {
+            const data = FormMessage.getFieldsValue()
+            const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
+            if (isAvailable) {
+                setTriggerSave(!triggerSave)
+            } else {
+                var counterBefore = data.EventNumber
+                message.warning("Nomor agenda " + counterBefore + " sudah terdaftar, nomor agenda akan di update menjadi " + counterAfter)
+                setLoadingSubmit(false)
+            }
+        } catch (error) {
+            message.error("Terjadi kesalahan saat memvalidasi data")
+            setLoadingSubmit(false)
         }
+    }
+
+    const handleFinishFailed = () => {
+        setLoadingSubmit(false)
     }
 
 
@@ -346,15 +373,15 @@ export default function pageSuratKeluar() {
         fetchPriority()
         fetchUser()
         fetchCounter()
-    }, [])
+    }, [fetchCounter])
 
 
 
     return (
         <main>
             <div className="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 hover:bg-yellow-100 text-yellow-400 cursor-pointer shadow-md"
-                    onClick={handleDraft}
+                <div className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-yellow-100 cursor-pointer'} text-yellow-400 shadow-md`}
+                    onClick={!loadingSubmit ? handleDraft : undefined}
                 >
                     <MdDrafts className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -362,8 +389,8 @@ export default function pageSuratKeluar() {
                     </div>
                 </div>
 
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 hover:bg-red-100 text-red-400 cursor-pointer shadow-md"
-                    onClick={handleReset}
+                <div className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-100 cursor-pointer'} text-red-400 shadow-md`}
+                    onClick={!loadingSubmit ? handleReset : undefined}
                 >
                     <MdClear className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -371,8 +398,8 @@ export default function pageSuratKeluar() {
                     </div>
                 </div>
 
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 hover:bg-green-100 text-green-400 cursor-pointer shadow-md"
-                    onClick={handleSubmit}
+                <div className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-100 cursor-pointer'} text-green-400 shadow-md`}
+                    onClick={!loadingSubmit ? handleSubmit : undefined}
                 >
                     <MdOutlineDocumentScanner className="mb-2 text-sm" />
                     <div className="text-xs">
@@ -397,6 +424,7 @@ export default function pageSuratKeluar() {
                             colon={false}
                             form={FormMessage}
                             onFinish={handleFinishSubmission}
+                            onFinishFailed={handleFinishFailed}
                         >
                             {/* No. Agenda and Tanggal */}
                             <Row gutter={[24, 16]}>
@@ -685,8 +713,10 @@ export default function pageSuratKeluar() {
                                 Batal
                             </button>
 
-                            <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                            <button
+                                className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={handleConfirmSubmit}
+                                disabled={loadingSubmit}
                             >
                                 Simpan
                             </button>
@@ -713,8 +743,10 @@ export default function pageSuratKeluar() {
                                 Batal
                             </button>
 
-                            <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                            <button
+                                className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={handleConfirmReset}
+                                disabled={loadingSubmit}
                             >
                                 Konfirmasi
                             </button>
@@ -740,8 +772,10 @@ export default function pageSuratKeluar() {
                                 Batal
                             </button>
 
-                            <button className="flex-1 bg-green-500 text-white py-3 rounded font-semibold"
+                            <button
+                                className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={handleConfirmDraft}
+                                disabled={loadingSubmit}
                             >
                                 Simpan Draft
                             </button>

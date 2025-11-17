@@ -9,7 +9,7 @@ import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import dynamic from 'next/dynamic';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetCurrentDateInISOFormat, GetPositionName } from '@/utils/utility';
+import { GetCurrentDateInISOFormat, GetPositionName, formatCurrentWIBTimestamp } from '@/utils/utility';
 import { approveMessage, createMessage, getMessageByUid, updateMessage } from '@/services/message';
 import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -297,14 +297,16 @@ export default function pageDraft() {
                 const textSize = 10; // Font size for the text
                 const borderPadding = 10; // Padding inside the border box
 
-                const username = window.localStorage.getItem('Name')
-
+                const username = window.localStorage.getItem('Name');
+                const downloadTimestamp = formatCurrentWIBTimestamp();
 
                 const watermarkText = [
                     "",
                     "PT DAPEN PPIP",
                     "Downloaded by:",
-                    username,
+                    username || '-',
+                    "Downloaded at:",
+                    downloadTimestamp,
                 ];
 
                 pages.forEach((page) => {

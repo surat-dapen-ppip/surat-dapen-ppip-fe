@@ -11,7 +11,7 @@ import CryptoJS from 'crypto-js';
 
 import { getMessageByUid, updateMessageProccessed } from '@/services/message';
 import { getUsers } from '@/services/users';
-import { GetEventIDName, GetPositionName, GetSubmitIDName } from '@/utils/utility';
+import { GetEventIDName, GetPositionName, GetSubmitIDName, formatCurrentWIBTimestamp } from '@/utils/utility';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import { createMessageEvent, getMessageEvents } from '@/services/messageEvent';
@@ -106,14 +106,16 @@ export default function pageDetailSuratMasuk() {
                 const textSize = 10; // Font size for the text
                 const borderPadding = 10; // Padding inside the border box
 
-                const username = window.localStorage.getItem('Name')
-
+                const username = window.localStorage.getItem('Name');
+                const downloadTimestamp = formatCurrentWIBTimestamp();
 
                 const watermarkText = [
                     "",
                     "Dana Pensiun PPIP",
                     "Downloaded by:",
-                    username,
+                    username || '-',
+                    "Downloaded at:",
+                    downloadTimestamp,
                 ];
 
                 pages.forEach((page) => {

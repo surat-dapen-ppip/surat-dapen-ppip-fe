@@ -63,3 +63,29 @@ export const ZeroPad = (input) => {
     // Convert the input to a string and pad with zeros
     return input.toString().padStart(4, '0');
 }
+
+export const formatCurrentWIBTimestamp = () => {
+    const formatter = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    });
+
+    const parts = formatter.formatToParts(new Date());
+    const getPart = (type, fallback = '00') =>
+        parts.find((part) => part.type === type)?.value ?? fallback;
+
+    const day = getPart('day');
+    const month = getPart('month');
+    const year = getPart('year', '0000');
+    const hour = getPart('hour');
+    const minute = getPart('minute');
+    const second = getPart('second');
+
+    return `${day}-${month}-${year} ${hour}:${minute}:${second} WIB`;
+};
