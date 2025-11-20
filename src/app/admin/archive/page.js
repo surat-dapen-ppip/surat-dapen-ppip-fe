@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     getDocuments,
     createDocument,
@@ -13,7 +13,9 @@ import {
     updateDocument,
     getDocumentByUid
 } from '@/services/archive';
-import { MdOutlineUpload, MdEdit, MdDelete, MdFolder, MdFolderOpen, MdArrowBack, MdInsertDriveFile, MdAdd, MdRefresh, MdClose } from 'react-icons/md';
+import { getUsers } from '@/services/users';
+import { getOrganizations } from '@/services/organizations';
+import { MdOutlineUpload, MdEdit, MdDelete, MdFolder, MdFolderOpen, MdArrowBack, MdInsertDriveFile, MdAdd, MdRefresh, MdClose, MdPeople, MdContentCopy, MdLink, MdBusiness } from 'react-icons/md';
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
@@ -47,6 +49,18 @@ export default function ArchivePage() {
     const [downloading, setDownloading] = useState(false);
     const [watermarkedPdfUrl, setWatermarkedPdfUrl] = useState(null);
     const [currentDocumentData, setCurrentDocumentData] = useState(null);
+    const [shareSearch, setShareSearch] = useState('');
+    const [shareableUsers, setShareableUsers] = useState([]);
+    const [selectedShareUsers, setSelectedShareUsers] = useState([]);
+    const [isFetchingShareUsers, setIsFetchingShareUsers] = useState(false);
+    const [shareOrgSearch, setShareOrgSearch] = useState('');
+    const [shareableOrganizations, setShareableOrganizations] = useState([]);
+    const [selectedShareOrganizations, setSelectedShareOrganizations] = useState([]);
+    const [isFetchingShareOrganizations, setIsFetchingShareOrganizations] = useState(false);
+    const [currentUserInfo, setCurrentUserInfo] = useState({ name: '', uid: '' });
+    const [folderMetaPreview, setFolderMetaPreview] = useState({ created: '', updated: '' });
+    const [appOrigin, setAppOrigin] = useState('');
+    const [linkCopied, setLinkCopied] = useState(false);
 
     // Fetch directories and documents on component mount
     useEffect(() => {
@@ -72,6 +86,118 @@ export default function ArchivePage() {
 
         initializeArchive();
     }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        setCurrentUserInfo({
+            name: localStorage.getItem('Name') || '',
+            uid: localStorage.getItem('UserUID') || ''
+        });
+        setAppOrigin(window.location.origin);
+    }, []);
+
+    useEffect(() => {
+        if (!showNewFolderModal) return;
+        let isMounted = true;
+
+        const fetchShareableUsers = async () => {
+            setIsFetchingShareUsers(true);
+            try {
+                const response = await getUsers();
+                if (isMounted && response?.data) {
+                    setShareableUsers(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching shareable users:', error);
+            } finally {
+                if (isMounted) {
+                    setIsFetchingShareUsers(false);
+                }
+            }
+        };
+
+        const fetchShareableOrganizations = async () => {
+            setIsFetchingShareOrganizations(true);
+            try {
+                const response = await getOrganizations();
+                if (isMounted && response?.data) {
+                    setShareableOrganizations(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching organizations:', error);
+            } finally {
+                if (isMounted) {
+                    setIsFetchingShareOrganizations(false);
+                }
+            }
+        };
+
+        fetchShareableUsers();
+        fetchShareableOrganizations();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [showNewFolderModal]);
+
+    useEffect(() => {
+        if (showNewFolderModal) {
+            const timestamp = formatCurrentWIBTimestamp();
+            setFolderMetaPreview({
+                created: timestamp,
+                updated: timestamp
+            });
+            setLinkCopied(false);
+            setShareSearch('');
+            setShareOrgSearch('');
+        } else {
+            setShareSearch('');
+            setSelectedShareUsers([]);
+            setShareOrgSearch('');
+            setSelectedShareOrganizations([]);
+        }
+    }, [showNewFolderModal]);
+
+    useEffect(() => {
+        if (!linkCopied) return;
+        const timeout = setTimeout(() => setLinkCopied(false), 2000);
+        return () => clearTimeout(timeout);
+    }, [linkCopied]);
+
+    const shareSuggestions = useMemo(() => {
+        if (!shareSearch.trim()) return [];
+        const query = shareSearch.toLowerCase();
+        return shareableUsers
+            .filter(user => {
+                const name = (user.Name || user.name || '').toLowerCase();
+                const username = (user.Username || user.username || '').toLowerCase();
+                const email = (user.Email || user.email || '').toLowerCase();
+                return name.includes(query) || username.includes(query) || email.includes(query);
+            })
+            .filter(user => !selectedShareUsers.some(selected => (selected.UID || selected.uid) === (user.UID || user.uid)))
+            .slice(0, 5);
+    }, [shareSearch, shareableUsers, selectedShareUsers]);
+
+    const organizationSuggestions = useMemo(() => {
+        if (!shareOrgSearch.trim()) return [];
+        const query = shareOrgSearch.toLowerCase();
+        return shareableOrganizations
+            .filter(org => {
+                const name = (org.Name || org.name || '').toLowerCase();
+                const code = (org.Code || org.code || '').toLowerCase();
+                return name.includes(query) || code.includes(query);
+            })
+            .filter(org => !selectedShareOrganizations.some(selected => (selected.UID || selected.uid) === (org.UID || org.uid)))
+            .slice(0, 5);
+    }, [shareOrgSearch, shareableOrganizations, selectedShareOrganizations]);
+
+    const folderLinkPreview = useMemo(() => {
+        if (!appOrigin) return '';
+        const sanitized = newFolderName.trim()
+            ? newFolderName.trim().replace(/\s+/g, '-').toLowerCase()
+            : 'folder-baru';
+        return `${appOrigin}/admin/archive?folder=pending-${sanitized}`;
+    }, [appOrigin, newFolderName]);
 
     const fetchFolderContents = useCallback(async () => {
         setIsLoading(true);
@@ -381,6 +507,74 @@ export default function ArchivePage() {
         }
     };
 
+    const resetNewFolderForm = () => {
+        setNewFolderName('');
+        setSelectedShareUsers([]);
+        setSelectedShareOrganizations([]);
+        setShareSearch('');
+        setShareOrgSearch('');
+        setFolderMetaPreview({ created: '', updated: '' });
+        setLinkCopied(false);
+    };
+
+    const handleSelectShareSuggestion = (user) => {
+        if (!user) return;
+        const userUid = user.UID || user.uid;
+        if (!userUid) return;
+        setSelectedShareUsers(prev => [...prev, user]);
+        setShareSearch('');
+    };
+
+    const handleRemoveShareUser = (userUid) => {
+        setSelectedShareUsers(prev => prev.filter(user => (user.UID || user.uid) !== userUid));
+    };
+
+    const handleAddShareUserFromInput = () => {
+        if (shareSuggestions.length === 0) return;
+        handleSelectShareSuggestion(shareSuggestions[0]);
+    };
+
+    const handleShareInputKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            handleAddShareUserFromInput();
+        }
+    };
+
+    const handleSelectShareOrganization = (organization) => {
+        if (!organization) return;
+        const organizationUid = organization.UID || organization.uid;
+        if (!organizationUid) return;
+        setSelectedShareOrganizations(prev => [...prev, organization]);
+        setShareOrgSearch('');
+    };
+
+    const handleRemoveShareOrganization = (organizationUid) => {
+        setSelectedShareOrganizations(prev => prev.filter(org => (org.UID || org.uid) !== organizationUid));
+    };
+
+    const handleAddShareOrganizationFromInput = () => {
+        if (organizationSuggestions.length === 0) return;
+        handleSelectShareOrganization(organizationSuggestions[0]);
+    };
+
+    const handleShareOrgInputKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            handleAddShareOrganizationFromInput();
+        }
+    };
+
+    const handleCopyFolderLink = async () => {
+        if (!folderLinkPreview || typeof navigator === 'undefined' || !navigator.clipboard) return;
+        try {
+            await navigator.clipboard.writeText(folderLinkPreview);
+            setLinkCopied(true);
+        } catch (error) {
+            console.error('Failed to copy folder link:', error);
+        }
+    };
+
     const handleSearch = (e) => {
         setSearchQuery(e.target.value);
     };
@@ -401,11 +595,29 @@ export default function ArchivePage() {
                 throw new Error('User not authenticated');
             }
 
-            const response = await createDirectory({
-                pathname: newFolderName, // API expects lowercase pathname
+            const viewerUserUids = selectedShareUsers
+                .map(user => user.UID || user.uid)
+                .filter(uid => !!uid);
+
+            const viewerOrganizationUids = selectedShareOrganizations
+                .map(org => org.UID || org.uid)
+                .filter(uid => !!uid);
+
+            const requestPayload = {
+                pathname: newFolderName,
                 parent_uid: currentFolder || null,
                 owner_uid: ownerUid
-            });
+            };
+
+            if (viewerUserUids.length > 0) {
+                requestPayload.viewer_user_uids = viewerUserUids;
+            }
+
+            if (viewerOrganizationUids.length > 0) {
+                requestPayload.viewer_organization_uids = viewerOrganizationUids;
+            }
+
+            const response = await createDirectory(requestPayload);
 
             if (response && response.data) {
                 console.log('New folder created:', response.data);
@@ -430,8 +642,9 @@ export default function ArchivePage() {
                     });
                     setFolders(foldersWithUIDs);
                 }
+
                 setShowNewFolderModal(false);
-                setNewFolderName('');
+                resetNewFolderForm();
                 setErrorMessage('Folder created successfully!');
             }
         } catch (error) {
@@ -833,7 +1046,7 @@ export default function ArchivePage() {
             {/* New Folder Modal */}
             {showNewFolderModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-5xl">
                         <h3 className="text-lg font-semibold mb-4">Buat Folder Baru</h3>
                         <input
                             type="text"
@@ -842,12 +1055,220 @@ export default function ArchivePage() {
                             value={newFolderName}
                             onChange={(e) => setNewFolderName(e.target.value)}
                         />
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4 mb-6">
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-gray-500">Pemilik folder</p>
+                                <p className="text-sm font-semibold text-gray-900">{currentUserInfo.name || 'Pengguna saat ini'}</p>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                <div>
+                                    <p className="text-gray-500">Dibuat</p>
+                                    <p className="font-medium text-gray-900">{folderMetaPreview.created || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-500">Terakhir diperbarui</p>
+                                    <p className="font-medium text-gray-900">{folderMetaPreview.updated || '-'}</p>
+                                </div>
+                            </div>
+                            <div className="border-t border-gray-200 pt-3">
+                                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                    <MdLink className="text-gray-500" /> Link folder
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value={folderLinkPreview || 'Link akan tersedia setelah halaman dimuat'}
+                                        className="flex-1 border rounded px-3 py-2 text-xs text-gray-700 bg-white"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="p-2 border rounded text-gray-600 hover:bg-gray-100 disabled:opacity-40"
+                                        onClick={handleCopyFolderLink}
+                                        disabled={!folderLinkPreview}
+                                    >
+                                        <MdContentCopy size={18} />
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {linkCopied ? 'Link siap dibagikan.' : 'UID folder akan diganti otomatis setelah folder berhasil dibuat.'}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            <div className="space-y-5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-semibold text-gray-700">
+                                        Bagikan folder ini
+                                    </label>
+                                    {isFetchingShareUsers && (
+                                        <span className="text-xs text-gray-400">Memuat user...</span>
+                                    )}
+                                </div>
+                                <div className="mt-3">
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <div className="relative flex-1">
+                                                <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
+                                                    <MdPeople size={18} />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                                    placeholder="Ketik nama atau username"
+                                                    value={shareSearch}
+                                                    onChange={(e) => setShareSearch(e.target.value)}
+                                                    onKeyDown={handleShareInputKeyDown}
+                                                />
+                                                {shareSuggestions.length > 0 && (
+                                                    <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
+                                                        {shareSuggestions.map((user) => (
+                                                            <button
+                                                                key={user.UID || user.uid}
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50"
+                                                                onMouseDown={(event) => event.preventDefault()}
+                                                                onClick={() => handleSelectShareSuggestion(user)}
+                                                            >
+                                                                <p className="text-sm font-medium text-gray-900">{user.Name || user.name || 'Tanpa nama'}</p>
+                                                                <p className="text-xs text-gray-500">{user.Username || user.Email || user.email || user.uid}</p>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                onClick={handleAddShareUserFromInput}
+                                                disabled={shareSuggestions.length === 0}
+                                            >
+                                                Tambahkan
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            Tambahkan pengguna yang dapat mengakses folder ini
+                                        </p>
+                                    </div>
+                                    <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                                        {selectedShareUsers.length === 0 ? (
+                                            <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
+                                                Belum ada user yang ditambahkan.
+                                            </div>
+                                        ) : (
+                                            selectedShareUsers.map((user) => (
+                                                <div
+                                                    key={user.UID || user.uid}
+                                                    className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
+                                                >
+                                                    <div>
+                                                        <p className="text-xs font-medium text-gray-900">{user.Name || user.name}</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-red-500 hover:text-red-600"
+                                                        onClick={() => handleRemoveShareUser(user.UID || user.uid)}
+                                                    >
+                                                        Hapus
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-semibold text-gray-700">
+                                        Bagikan berdasarkan organisasi
+                                    </label>
+                                    {isFetchingShareOrganizations && (
+                                        <span className="text-xs text-gray-400">Memuat organisasi...</span>
+                                    )}
+                                </div>
+                                <div className="mt-3">
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <div className="relative flex-1">
+                                                <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
+                                                    <MdBusiness size={18} />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                                    placeholder="Ketik nama organisasi"
+                                                    value={shareOrgSearch}
+                                                    onChange={(e) => setShareOrgSearch(e.target.value)}
+                                                    onKeyDown={handleShareOrgInputKeyDown}
+                                                />
+                                                {organizationSuggestions.length > 0 && (
+                                                    <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
+                                                        {organizationSuggestions.map((organization) => (
+                                                            <button
+                                                                key={organization.UID || organization.uid}
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50"
+                                                                onMouseDown={(event) => event.preventDefault()}
+                                                                onClick={() => handleSelectShareOrganization(organization)}
+                                                            >
+                                                                <p className="text-sm font-medium text-gray-900">{organization.Name || organization.name || 'Tanpa nama'}</p>
+                                                                {organization.Code && (
+                                                                    <p className="text-xs text-gray-500">{organization.Code}</p>
+                                                                )}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                onClick={handleAddShareOrganizationFromInput}
+                                                disabled={organizationSuggestions.length === 0}
+                                            >
+                                                Tambahkan
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            Seluruh anggota organisasi yang dipilih akan otomatis mewarisi akses folder.
+                                        </p>
+                                    </div>
+                                    <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                                        {selectedShareOrganizations.length === 0 ? (
+                                            <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
+                                                Belum ada organisasi yang ditambahkan.
+                                            </div>
+                                        ) : (
+                                            selectedShareOrganizations.map((organization) => (
+                                                <div
+                                                    key={organization.UID || organization.uid}
+                                                    className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
+                                                >
+                                                    <div>
+                                                        <p className="text-xs font-medium text-gray-900">{organization.Name || organization.name}</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-red-500 hover:text-red-600"
+                                                        onClick={() => handleRemoveShareOrganization(organization.UID || organization.uid)}
+                                                    >
+                                                        Hapus
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="flex justify-end space-x-2">
                             <button
                                 className="px-4 py-2 border rounded text-gray-500 hover:bg-gray-100"
                                 onClick={() => {
                                     setShowNewFolderModal(false);
-                                    setNewFolderName('');
+                                    resetNewFolderForm();
                                 }}
                             >
                                 Cancel

@@ -120,9 +120,11 @@ export const deleteDirectory = async (uid) => {
  * @param {string} [filename] - Optional filename (will use file.name if not provided)
  * @param {string} [parent_uid] - Parent directory UID (optional for root)
  * @param {string} owner_uid - Owner user UID
+ * @param {string[]} [viewerUserUids] - Optional viewer user UID list
+ * @param {string[]} [viewerOrganizationUids] - Optional viewer organization UID list
  * @returns {Promise<Object>} Created document
  */
-export const createDocument = async (file, filename, parent_uid, owner_uid) => {
+export const createDocument = async (file, filename, parent_uid, owner_uid, viewerUserUids, viewerOrganizationUids) => {
     try {
         const formData = new FormData();
         formData.append('file', file);
@@ -137,6 +139,14 @@ export const createDocument = async (file, filename, parent_uid, owner_uid) => {
         
         // Owner UID is required
         formData.append('owner_uid', owner_uid);
+
+        if (viewerUserUids && viewerUserUids.length > 0) {
+            formData.append('viewer_user_uids', JSON.stringify(viewerUserUids));
+        }
+
+        if (viewerOrganizationUids && viewerOrganizationUids.length > 0) {
+            formData.append('viewer_organization_uids', JSON.stringify(viewerOrganizationUids));
+        }
         
         const response = await axiosInstance.post('/archive/document', formData, {
             headers: {

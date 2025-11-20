@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import moment from 'moment';
 import { getMediaByUid } from '@/services/media';
+import { debounce } from 'lodash';
 
 const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
 
@@ -153,7 +154,7 @@ export default function pageDraft() {
         }
     }
 
-    const handleOnSaveComplete = async (content) => {
+    const handleOnSaveComplete = debounce(async (content) => {
         setLoadingSubmit(true); // Start loading spinner
         let data = FormMessage.getFieldsValue()
         let date = GetCurrentDateInISOFormat()
@@ -261,7 +262,7 @@ export default function pageDraft() {
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
         }
-    }
+    }, 300)
 
     const [loadingSubmit, setLoadingSubmit] = useState(false);
     const [fileList, setFileList] = useState([]);
@@ -363,7 +364,7 @@ export default function pageDraft() {
         }
     }
 
-    const handleFinishSubmission = async () => {
+    const handleFinishSubmission = debounce(async () => {
         const data = FormMessage.getFieldsValue()
         const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
         
@@ -389,7 +390,7 @@ export default function pageDraft() {
             var counterAfter = await fetchCounter()
             message.warning("Nomor agenda " + counterBefore + " sudah terdaftar, nomor agenda akan di update menjadi " + counterAfter)
         }
-    }
+    }, 300)
 
 
     const [dataUser, setDataUser] = useState([])

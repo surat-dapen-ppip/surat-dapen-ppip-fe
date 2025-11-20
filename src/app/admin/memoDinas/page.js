@@ -14,6 +14,7 @@ import { checkMessageAvailability, createMessage, getMessageCounter } from '@/se
 import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
+import { debounce } from 'lodash';
 
 
 const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
@@ -161,7 +162,7 @@ export default function pageMemoDinas() {
         }
     }
 
-    const handleOnSaveComplete = async (content) => {
+    const handleOnSaveComplete = debounce(async (content) => {
         if (!loadingSubmit) {
             setLoadingSubmit(true); // Start loading spinner
         }
@@ -233,8 +234,7 @@ export default function pageMemoDinas() {
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
         }
-        setTriggerSave(!triggerSave)
-    }
+    }, 300)
 
     const [loadingSubmit, setLoadingSubmit] = useState(false);
     const [fileList, setFileList] = useState([]);
@@ -312,7 +312,7 @@ export default function pageMemoDinas() {
     };
 
 
-    const handleFinishSubmission = async () => {
+    const handleFinishSubmission = debounce(async () => {
         try {
             const data = FormMessage.getFieldsValue()
             const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
@@ -328,7 +328,7 @@ export default function pageMemoDinas() {
             message.error("Terjadi kesalahan saat memvalidasi data")
             setLoadingSubmit(false)
         }
-    }
+    }, 300)
 
     const handleFinishFailed = () => {
         setLoadingSubmit(false)

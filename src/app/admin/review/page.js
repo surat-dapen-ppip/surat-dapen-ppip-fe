@@ -20,6 +20,7 @@ import { getMediaByUid } from '@/services/media';
 
 import QRCodeStyling from "qr-code-styling";
 import { createMessageRejection } from '@/services/messageRejection';
+import { debounce } from 'lodash';
 
 const RichEditSignatureMemoComponent = dynamic(() => import('@/components/richEditSignatureMemo'), { ssr: false });
 const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
@@ -292,9 +293,8 @@ export default function pageReview() {
     const [loadingSubmit, setLoadingSubmit] = useState(false);
     const [fileList, setFileList] = useState([]);
 
-    const handleFinishSubmission = async () => {}
 
-    const handleFinishRejection = async () => {
+    const handleFinishRejection = debounce(async () => {
         setLoadingSubmit(true);
         let data = FormRejection.getFieldsValue()
         data.MessageUID = UID
@@ -310,10 +310,10 @@ export default function pageReview() {
         } finally {
             setLoadingSubmit(false);
         }
-    }
+    }, 300)
 
 
-    const handleFinishRevision = async () => {
+    const handleFinishRevision = debounce(async () => {
         setLoadingSubmit(true);
         let data = FormRevision.getFieldsValue()
         data.MessageUID = UID
@@ -329,9 +329,9 @@ export default function pageReview() {
         } finally {
             setLoadingSubmit(false);
         }
-    }
+    }, 300)
 
-    const handleFinishApprove = async () => {
+    const handleFinishApprove = debounce(async () => {
         if (loadingSubmit) {
             return
         }
@@ -352,7 +352,7 @@ export default function pageReview() {
             setLoadingSubmit(false)
             message.error('Terjadi kesalahan saat memproses approval')
         }
-    }
+    }, 300)
 
 
     const [dataUser, setDataUser] = useState([])
