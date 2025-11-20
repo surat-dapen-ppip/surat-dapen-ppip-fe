@@ -88,6 +88,8 @@ export default function pageReview() {
     const [isModalRevisionOpen, setIsModalRevisionOpen] = useState(false)
     const [isModalRejectOpen, setIsModalRejectOpen] = useState(false)
 
+
+    const handleFinishSubmission = async()=>{}
     const handleBack = () => { setIsModalBackOpen(true) }
     const handleApprove = () => {
         if (loadingSubmit) {
