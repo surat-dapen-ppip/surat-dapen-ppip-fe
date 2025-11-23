@@ -13,6 +13,7 @@ import {
     updateDocument,
     getDocumentByUid
 } from '@/services/archive';
+import { getDirectoryAccess, getDocumentAccess } from '@/services/access';
 import { getUsers } from '@/services/users';
 import { getOrganizations } from '@/services/organizations';
 import { MdOutlineUpload, MdEdit, MdDelete, MdFolder, MdFolderOpen, MdArrowBack, MdInsertDriveFile, MdAdd, MdRefresh, MdClose, MdPeople, MdContentCopy, MdLink, MdBusiness } from 'react-icons/md';
@@ -24,6 +25,76 @@ import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 import axios from 'axios';
 import { formatCurrentWIBTimestamp } from '@/utils/utility';
+import { useSearchParams } from 'next/navigation';
+
+const resolveAccessList = (value) => {
+    if (!value) return undefined;
+    if (Array.isArray(value)) return value;
+    return undefined;
+};
+
+const extractAccessData = (response) => {
+    const payload = response?.data ? response.data : response;
+
+    const userCandidates = [
+        payload?.users,
+        payload?.viewer_users,
+        payload?.viewer_user_access,
+        payload?.viewer_user_uids,
+        payload?.viewer_user_ids,
+        payload?.viewer_user,
+        payload?.UserAccess,
+        payload?.user_access,
+        payload?.data?.users
+    ];
+
+    const organizationCandidates = [
+        payload?.organizations,
+        payload?.viewer_organizations,
+        payload?.viewer_organization_access,
+        payload?.viewer_organization_uids,
+        payload?.organizationAccess,
+        payload?.OrganizationAccess,
+        payload?.organization_access,
+        payload?.data?.organizations
+    ];
+
+    const users = (userCandidates.reduce((acc, candidate) => acc || resolveAccessList(candidate), undefined) || []).map(normalizeAccessEntry);
+    const organizations = (organizationCandidates.reduce((acc, candidate) => acc || resolveAccessList(candidate), undefined) || []).map(normalizeAccessEntry);
+
+    return { users, organizations };
+};
+
+const formatAccessUserLabel = (user) => {
+    if (!user) return 'Tanpa nama';
+    if (typeof user === 'string') {
+        return user;
+    }
+    return user.Name || user.name || user.Username || user.username || user.Email || user.email || 'Tanpa nama';
+};
+
+const formatAccessOrgLabel = (org) => {
+    if (!org) return 'Tanpa nama';
+    if (typeof org === 'string') return org;
+    return org.Name || org.name || org.Code || org.code || 'Organisasi';
+};
+
+const normalizeAccessEntry = (entry) => {
+    if (!entry || typeof entry === 'string') return entry;
+    const uid = entry.UID || entry.uid || entry.user_uid || entry.UserUID || entry.organization_uid || entry.OrganizationUID;
+    if (!uid) return entry;
+    return {
+        ...entry,
+        UID: uid,
+        uid: uid,
+    };
+};
+
+const getAccessKey = (entry) => {
+    if (!entry) return Math.random().toString();
+    if (typeof entry === 'string') return entry;
+    return entry.UID || entry.uid || entry.email || entry.Email || entry.Code || entry.code || entry.username || entry.Username || JSON.stringify(entry);
+};
 
 export default function ArchivePage() {
     const [documents, setDocuments] = useState([]);
@@ -57,25 +128,69 @@ export default function ArchivePage() {
     const [shareableOrganizations, setShareableOrganizations] = useState([]);
     const [selectedShareOrganizations, setSelectedShareOrganizations] = useState([]);
     const [isFetchingShareOrganizations, setIsFetchingShareOrganizations] = useState(false);
+    const [editShareSearch, setEditShareSearch] = useState('');
+    const [editShareOrgSearch, setEditShareOrgSearch] = useState('');
+    const searchParams = useSearchParams();
+    const folderParam = searchParams?.get('folder') || '';
     const [currentUserInfo, setCurrentUserInfo] = useState({ name: '', uid: '' });
     const [folderMetaPreview, setFolderMetaPreview] = useState({ created: '', updated: '' });
     const [appOrigin, setAppOrigin] = useState('');
     const [linkCopied, setLinkCopied] = useState(false);
+    const [editLinkCopied, setEditLinkCopied] = useState(false);
+    const [editAccessUsers, setEditAccessUsers] = useState([]);
+    const [editAccessOrganizations, setEditAccessOrganizations] = useState([]);
+    const [isFetchingEditAccess, setIsFetchingEditAccess] = useState(false);
 
+
+    // Update breadcrumb when current folder changes
+    const updateBreadcrumb = useCallback(async (folderId) => {
+        if (!folderId) {
+            // Root folder
+            setFolderBreadcrumb([{ uid: '', Pathname: 'Root' }]);
+            return;
+        }
+
+        try {
+            const path = [];
+            let currentId = folderId;
+
+            while (currentId) {
+                let ownerUID = localStorage.getItem('UserUID');
+
+                const folderResponse = await getDirectoryByUid(currentId, ownerUID);
+                if (folderResponse && folderResponse.data) {
+                    const folder = folderResponse.data;
+                    path.unshift({ uid: folder.uid, Pathname: folder.Pathname });
+                    currentId = folder.parent_uid;
+                } else {
+                    break;
+                }
+            }
+
+            // Add root at the beginning
+            path.unshift({ uid: '', Pathname: 'Root' });
+            setFolderBreadcrumb(path);
+        } catch (error) {
+            console.error('Error updating breadcrumb:', error);
+        }
+    }, []);
+
+    
     // Fetch directories and documents on component mount
     useEffect(() => {
         const initializeArchive = async () => {
             const ownerUid = localStorage.getItem('UserUID');
+            const initialFolder = folderParam || '';
             try {
                 setIsLoading(true);
                 // Get the root directories first
                 const dirResponse = await getChildDirectories("", ownerUid);
                 if (dirResponse && dirResponse.data) {
                     setFolders(dirResponse.data);
-                    setCurrentFolder('');
-                    setFolderHistory(['']);
-                    updateBreadcrumb('');
                 }
+                setCurrentFolder(initialFolder);
+                setFolderHistory(initialFolder ? ['', initialFolder] : ['']);
+                await updateBreadcrumb(initialFolder);
             } catch (error) {
                 console.error('Error initializing archive:', error);
                 setErrorMessage('Failed to load folders. Please try again later.');
@@ -85,7 +200,7 @@ export default function ArchivePage() {
         };
 
         initializeArchive();
-    }, []);
+    }, [folderParam, updateBreadcrumb]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -97,7 +212,7 @@ export default function ArchivePage() {
     }, []);
 
     useEffect(() => {
-        if (!showNewFolderModal) return;
+        if (!showNewFolderModal && !showEditModal) return;
         let isMounted = true;
 
         const fetchShareableUsers = async () => {
@@ -138,7 +253,7 @@ export default function ArchivePage() {
         return () => {
             isMounted = false;
         };
-    }, [showNewFolderModal]);
+    }, [showNewFolderModal, showEditModal]);
 
     useEffect(() => {
         if (showNewFolderModal) {
@@ -163,6 +278,18 @@ export default function ArchivePage() {
         const timeout = setTimeout(() => setLinkCopied(false), 2000);
         return () => clearTimeout(timeout);
     }, [linkCopied]);
+
+    useEffect(() => {
+        if (!editLinkCopied) return;
+        const timeout = setTimeout(() => setEditLinkCopied(false), 2000);
+        return () => clearTimeout(timeout);
+    }, [editLinkCopied]);
+
+    useEffect(() => {
+        if (!showEditModal) {
+            setEditLinkCopied(false);
+        }
+    }, [showEditModal]);
 
     const shareSuggestions = useMemo(() => {
         if (!shareSearch.trim()) return [];
@@ -191,6 +318,33 @@ export default function ArchivePage() {
             .slice(0, 5);
     }, [shareOrgSearch, shareableOrganizations, selectedShareOrganizations]);
 
+    const editShareSuggestions = useMemo(() => {
+        if (!editShareSearch.trim()) return [];
+        const query = editShareSearch.toLowerCase();
+        return shareableUsers
+            .filter(user => {
+                const name = (user.Name || user.name || '').toLowerCase();
+                const username = (user.Username || user.username || '').toLowerCase();
+                const email = (user.Email || user.email || '').toLowerCase();
+                return name.includes(query) || username.includes(query) || email.includes(query);
+            })
+            .filter(user => !editAccessUsers.some(selected => (selected.UID || selected.uid) === (user.UID || user.uid)))
+            .slice(0, 5);
+    }, [editShareSearch, shareableUsers, editAccessUsers]);
+
+    const editOrganizationSuggestions = useMemo(() => {
+        if (!editShareOrgSearch.trim()) return [];
+        const query = editShareOrgSearch.toLowerCase();
+        return shareableOrganizations
+            .filter(org => {
+                const name = (org.Name || org.name || '').toLowerCase();
+                const code = (org.Code || org.code || '').toLowerCase();
+                return name.includes(query) || code.includes(query);
+            })
+            .filter(org => !editAccessOrganizations.some(selected => (selected.UID || selected.uid) === (org.UID || org.uid)))
+            .slice(0, 5);
+    }, [editShareOrgSearch, shareableOrganizations, editAccessOrganizations]);
+
     const folderLinkPreview = useMemo(() => {
         if (!appOrigin) return '';
         const sanitized = newFolderName.trim()
@@ -198,6 +352,65 @@ export default function ArchivePage() {
             : 'folder-baru';
         return `${appOrigin}/admin/archive?folder=pending-${sanitized}`;
     }, [appOrigin, newFolderName]);
+
+    const currentUserUid = useMemo(() => {
+        if (currentUserInfo.uid) return currentUserInfo.uid;
+        if (typeof window !== 'undefined') {
+            return window.localStorage.getItem('UserUID') || '';
+        }
+        return '';
+    }, [currentUserInfo.uid]);
+
+    const isFolderOwnedByCurrentUser = useCallback(
+        (folder) => {
+            const ownerUid = folder.OwnerUID || folder.owner_uid || folder.ownerUid || folder.ownerUID;
+            return !!ownerUid && ownerUid === currentUserUid;
+        },
+        [currentUserUid]
+    );
+
+    const fetchEditAccess = useCallback(async (uid, type) => {
+        setIsFetchingEditAccess(true);
+        try {
+            let response = null;
+            if (type === 'folder') {
+                response = await getDirectoryAccess(uid);
+            } else {
+                response = await getDocumentAccess(uid);
+            }
+
+            const { users, organizations } = extractAccessData(response);
+            setEditAccessUsers(users);
+            setEditAccessOrganizations(organizations);
+        } catch (error) {
+            console.error('Error fetching access list:', error);
+            setEditAccessUsers([]);
+            setEditAccessOrganizations([]);
+        } finally {
+            setIsFetchingEditAccess(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!showEditModal || !editItem) {
+            setEditAccessUsers([]);
+            setEditAccessOrganizations([]);
+            setIsFetchingEditAccess(false);
+            return;
+        }
+
+        const uid = editItem.uid || editItem.UID;
+        if (!uid) return;
+
+        fetchEditAccess(uid, editItem.type);
+    }, [showEditModal, editItem, fetchEditAccess]);
+
+    useEffect(() => {
+        if (!showEditModal) {
+            setEditShareSearch('');
+            setEditShareOrgSearch('');
+        }
+    }, [showEditModal]);
 
     const fetchFolderContents = useCallback(async () => {
         setIsLoading(true);
@@ -254,36 +467,38 @@ export default function ArchivePage() {
         fetcher()
     }, [currentFolder, fetchFolderContents]);
 
-    // Update breadcrumb when current folder changes
-    const updateBreadcrumb = async (folderId) => {
-        if (!folderId) {
-            // Root folder
-            setFolderBreadcrumb([{ uid: '', Pathname: 'Root' }]);
-            return;
-        }
+    
+    const editOwnerName = useMemo(() => {
+        if (editItem?.OwnerName) return editItem.OwnerName;
+        if (editItem?.owner_name) return editItem.owner_name;
+        if (editItem?.Owner) return editItem.Owner;
+        if (editItem?.OwnerInfo?.name) return editItem.OwnerInfo.name;
+        return currentUserInfo.name || 'Pengguna saat ini';
+    }, [editItem, currentUserInfo.name]);
 
+    const editCreatedAt = useMemo(() => {
+        return editItem?.CreatedAt || editItem?.created_at || editItem?.createdAt || '-';
+    }, [editItem]);
+
+    const editUpdatedAt = useMemo(() => {
+        return editItem?.UpdatedAt || editItem?.updated_at || editItem?.updatedAt || '-';
+    }, [editItem]);
+
+    const editLinkPreview = useMemo(() => {
+        if (!appOrigin) return '';
+        if (editItem?.type !== 'folder') return '';
+        const folderUid = editItem?.uid || editItem?.UID || editItem?.FolderUID;
+        if (!folderUid) return '';
+        return `${appOrigin}/admin/archive?folder=${folderUid}`;
+    }, [appOrigin, editItem]);
+
+    const handleCopyEditLink = async () => {
+        if (!editLinkPreview || typeof navigator === 'undefined' || !navigator.clipboard) return;
         try {
-            const path = [];
-            let currentId = folderId;
-
-            while (currentId) {
-                let ownerUID = localStorage.getItem('UserUID');
-
-                const folderResponse = await getDirectoryByUid(currentId, ownerUID);
-                if (folderResponse && folderResponse.data) {
-                    const folder = folderResponse.data;
-                    path.unshift({ uid: folder.uid, Pathname: folder.Pathname });
-                    currentId = folder.parent_uid;
-                } else {
-                    break;
-                }
-            }
-
-            // Add root at the beginning
-            path.unshift({ uid: '', Pathname: 'Root' });
-            setFolderBreadcrumb(path);
+            await navigator.clipboard.writeText(editLinkPreview);
+            setEditLinkCopied(true);
         } catch (error) {
-            console.error('Error updating breadcrumb:', error);
+            console.error('Failed to copy edit link:', error);
         }
     };
 
@@ -565,6 +780,56 @@ export default function ArchivePage() {
         }
     };
 
+    const handleEditSelectShareSuggestion = (user) => {
+        if (!user) return;
+        const userUid = user.UID || user.uid;
+        if (!userUid) return;
+        if (editAccessUsers.some(selected => (selected.UID || selected.uid) === userUid)) return;
+        setEditAccessUsers(prev => [...prev, user]);
+        setEditShareSearch('');
+    };
+
+    const handleEditRemoveShareUser = (userUid) => {
+        setEditAccessUsers(prev => prev.filter(user => (user.UID || user.uid) !== userUid));
+    };
+
+    const handleAddEditShareUserFromInput = () => {
+        if (editShareSuggestions.length === 0) return;
+        handleEditSelectShareSuggestion(editShareSuggestions[0]);
+    };
+
+    const handleEditShareInputKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            handleAddEditShareUserFromInput();
+        }
+    };
+
+    const handleEditSelectShareOrganization = (organization) => {
+        if (!organization) return;
+        const organizationUid = organization.UID || organization.uid;
+        if (!organizationUid) return;
+        if (editAccessOrganizations.some(selected => (selected.UID || selected.uid) === organizationUid)) return;
+        setEditAccessOrganizations(prev => [...prev, organization]);
+        setEditShareOrgSearch('');
+    };
+
+    const handleEditRemoveShareOrganization = (organizationUid) => {
+        setEditAccessOrganizations(prev => prev.filter(org => (org.UID || org.uid) !== organizationUid));
+    };
+
+    const handleAddEditShareOrganizationFromInput = () => {
+        if (editOrganizationSuggestions.length === 0) return;
+        handleEditSelectShareOrganization(editOrganizationSuggestions[0]);
+    };
+
+    const handleEditShareOrgInputKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            handleAddEditShareOrganizationFromInput();
+        }
+    };
+
     const handleCopyFolderLink = async () => {
         if (!folderLinkPreview || typeof navigator === 'undefined' || !navigator.clipboard) return;
         try {
@@ -689,7 +954,24 @@ export default function ArchivePage() {
                 if (!editItem.uid) {
                     throw new Error('Cannot update directory: missing UID');
                 }
-                await updateDirectory(editItem.uid, { pathname: editName }); // API expects lowercase pathname
+
+                const viewerUserUids = editAccessUsers
+                    .map(user => user.UID || user.uid)
+                    .filter(Boolean);
+
+                const viewerOrganizationUids = editAccessOrganizations
+                    .map(org => org.UID || org.uid)
+                    .filter(Boolean);
+
+                const payload = { pathname: editName };
+                if (viewerUserUids.length > 0) {
+                    payload.viewer_user_uids = viewerUserUids;
+                }
+                if (viewerOrganizationUids.length > 0) {
+                    payload.viewer_organization_uids = viewerOrganizationUids;
+                }
+
+                await updateDirectory(editItem.uid, payload); // API expects lowercase pathname
 
                 // Refresh folders
                 const dirResponse = await getChildDirectories(currentFolder, ownerUid);
@@ -917,22 +1199,38 @@ export default function ArchivePage() {
                                             <div className="text-center text-sm truncate w-full" title={folder.Pathname}>
                                                 {folder.Pathname}
                                             </div>
-                                            {selectedItem === (folder.uid || folder.UID) && (
-                                                <div className="flex mt-2 space-x-2">
-                                                    <button
-                                                        className="text-green-500 hover:text-green-700 p-1"
-                                                        onClick={(e) => handleEditClick(folder, 'folder', e)}
-                                                    >
-                                                        <MdEdit size={16} />
-                                                    </button>
-                                                    <button
-                                                        className="text-red-500 hover:text-red-700 p-1"
-                                                        onClick={(e) => handleDeleteClick(folder, 'folder', e)}
-                                                    >
-                                                        <MdDelete size={16} />
-                                                    </button>
-                                                </div>
-                                            )}
+                                                            {selectedItem === (folder.uid || folder.UID) && (
+                                                                <div className="flex mt-2 space-x-2">
+                                                                    {isFolderOwnedByCurrentUser(folder) ? (
+                                                                        <>
+                                                                            <button
+                                                                                className="text-green-500 hover:text-green-700 p-1"
+                                                                                onClick={(e) => handleEditClick(folder, 'folder', e)}
+                                                                            >
+                                                                                <MdEdit size={16} />
+                                                                            </button>
+                                                                            <button
+                                                                                className="text-red-500 hover:text-red-700 p-1"
+                                                                                onClick={(e) => handleDeleteClick(folder, 'folder', e)}
+                                                                            >
+                                                                                <MdDelete size={16} />
+                                                                            </button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <button
+                                                                            className="text-blue-500 hover:text-blue-700 p-1 flex items-center space-x-1"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                navigateToFolder(folder);
+                                                                            }}
+                                                                            title="Lihat detail folder"
+                                                                        >
+                                                                            <MdFolderOpen size={16} />
+                                                                            <span className="text-xs">Detail</span>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -1287,17 +1585,256 @@ export default function ArchivePage() {
             {/* Edit Modal */}
             {showEditModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                        <h3 className="text-lg font-semibold mb-4">
-                            {editItem?.type === 'folder' ? 'Edit Nama Folder' : 'Edit Nama Dokumen'}
-                        </h3>
-                        <input
-                            type="text"
-                            placeholder="Name"
-                            className="border rounded px-4 py-2 w-full mb-4"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                        />
+                    <div className="bg-white rounded-lg p-6 w-full max-w-5xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">
+                                {editItem?.type === 'folder' ? 'Edit Folder' : 'Edit Dokumen'}
+                            </h3>
+                            <button
+                                className="text-gray-500 hover:text-gray-700"
+                                onClick={() => {
+                                    setShowEditModal(false);
+                                    setEditItem(null);
+                                    setEditName('');
+                                }}
+                            >
+                                <MdClose size={24} />
+                            </button>
+                        </div>
+
+                        <div className="grid mb-6">
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    placeholder="Name"
+                                    className="border rounded px-4 py-2 w-full"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                />
+
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-gray-500">
+                                            Pemilik {editItem?.type === 'folder' ? 'folder' : 'dokumen'}
+                                        </p>
+                                        <p className="text-sm font-semibold text-gray-900">{editOwnerName}</p>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                            <p className="text-gray-500">Dibuat</p>
+                                            <p className="font-medium text-gray-900">{editCreatedAt}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-gray-500">Terakhir diperbarui</p>
+                                            <p className="font-medium text-gray-900">{editUpdatedAt}</p>
+                                        </div>
+                                    </div>
+
+                                    {editItem?.type === 'folder' && (
+                                        <div className="border-t border-gray-200 pt-3">
+                                            <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                <MdLink className="text-gray-500" /> Link folder
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    value={editLinkPreview || 'Link tidak tersedia untuk folder ini.'}
+                                                    className="flex-1 border rounded px-3 py-2 text-xs text-gray-700 bg-white"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="p-2 border rounded text-gray-600 hover:bg-gray-100 disabled:opacity-40"
+                                                    onClick={handleCopyEditLink}
+                                                    disabled={!editLinkPreview}
+                                                >
+                                                    <MdContentCopy size={18} />
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {editLinkCopied ? 'Link berhasil disalin.' : 'UID folder akan tetap sama setelah disimpan.'}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            <div className="space-y-5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-semibold text-gray-700">
+                                        Daftar akses pengguna
+                                    </label>
+                                    {isFetchingShareUsers && (
+                                        <span className="text-xs text-gray-400">Memuat user...</span>
+                                    )}
+                                </div>
+                                <div className="mt-3">
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <div className="relative flex-1">
+                                                <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
+                                                    <MdPeople size={18} />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                                    placeholder="Ketik nama atau username"
+                                                    value={editShareSearch}
+                                                    onChange={(e) => setEditShareSearch(e.target.value)}
+                                                    onKeyDown={handleEditShareInputKeyDown}
+                                                />
+                                                {editShareSuggestions.length > 0 && (
+                                                    <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
+                                                        {editShareSuggestions.map((user) => (
+                                                            <button
+                                                                key={user.UID || user.uid}
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50"
+                                                                onMouseDown={(event) => event.preventDefault()}
+                                                                onClick={() => handleEditSelectShareSuggestion(user)}
+                                                            >
+                                                                <p className="text-sm font-medium text-gray-900">{user.Name || user.name || 'Tanpa nama'}</p>
+                                                                <p className="text-xs text-gray-500">{user.Username || user.Email || user.email || user.uid}</p>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                onClick={handleAddEditShareUserFromInput}
+                                                disabled={editShareSuggestions.length === 0}
+                                            >
+                                                Tambahkan
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            Tambahkan pengguna yang dapat mengakses item ini
+                                        </p>
+                                    </div>
+                                    <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                                        {editAccessUsers.length === 0 ? (
+                                            <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
+                                                Belum ada user yang ditambahkan.
+                                            </div>
+                                        ) : (
+                                            editAccessUsers.map((user) => (
+                                                <div
+                                                    key={getAccessKey(user)}
+                                                    className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
+                                                >
+                                                    <div>
+                                                        <p className="text-xs font-medium text-gray-900">{formatAccessUserLabel(user)}</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-red-500 hover:text-red-600"
+                                                        onClick={() => handleEditRemoveShareUser(user.UID || user.uid)}
+                                                    >
+                                                        Hapus
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-semibold text-gray-700">
+                                        Daftar akses organisasi
+                                    </label>
+                                    {isFetchingShareOrganizations && (
+                                        <span className="text-xs text-gray-400">Memuat organisasi...</span>
+                                    )}
+                                </div>
+                                <div className="mt-3">
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <div className="relative flex-1">
+                                                <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
+                                                    <MdBusiness size={18} />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                                    placeholder="Ketik nama organisasi"
+                                                    value={editShareOrgSearch}
+                                                    onChange={(e) => setEditShareOrgSearch(e.target.value)}
+                                                    onKeyDown={handleEditShareOrgInputKeyDown}
+                                                />
+                                                {editOrganizationSuggestions.length > 0 && (
+                                                    <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
+                                                        {editOrganizationSuggestions.map((organization) => (
+                                                            <button
+                                                                key={organization.UID || organization.uid}
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50"
+                                                                onMouseDown={(event) => event.preventDefault()}
+                                                                onClick={() => handleEditSelectShareOrganization(organization)}
+                                                            >
+                                                                <p className="text-sm font-medium text-gray-900">{organization.Name || organization.name || 'Tanpa nama'}</p>
+                                                                
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                onClick={handleAddEditShareOrganizationFromInput}
+                                                disabled={editOrganizationSuggestions.length === 0}
+                                            >
+                                                Tambahkan
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            Seluruh anggota organisasi yang dipilih akan otomatis mewarisi akses.
+                                        </p>
+                                    </div>
+                                    <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                                        {editAccessOrganizations.length === 0 ? (
+                                            <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
+                                                Belum ada organisasi yang ditambahkan.
+                                            </div>
+                                        ) : (
+                                            editAccessOrganizations.map((organization) => (
+                                                <div
+                                                    key={getAccessKey(organization)}
+                                                    className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
+                                                >
+                                                    <div>
+                                                        <p className="text-xs font-medium text-gray-900">{formatAccessOrgLabel(organization)}</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-red-500 hover:text-red-600"
+                                                        onClick={() => handleEditRemoveShareOrganization(organization.UID || organization.uid)}
+                                                    >
+                                                        Hapus
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 mt-3 mb-3">
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2 text-xs text-gray-500">
+                                    <p className="font-semibold text-gray-900">Catatan</p>
+                                    <p>
+                                        Gunakan tombol Save untuk menyimpan perubahan nama. Hanya pemilik folder
+                                        yang dapat memperbarui nama folder dan dokumen.
+                                    </p>
+                                </div>
+                            </div>
+
                         <div className="flex justify-end space-x-2">
                             <button
                                 className="px-4 py-2 border rounded text-gray-500 hover:bg-gray-100"
