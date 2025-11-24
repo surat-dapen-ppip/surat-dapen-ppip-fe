@@ -16,7 +16,7 @@ import {
 import { getDirectoryAccess, getDocumentAccess } from '@/services/access';
 import { getUsers } from '@/services/users';
 import { getOrganizations } from '@/services/organizations';
-import { MdOutlineUpload, MdEdit, MdDelete, MdFolder, MdFolderOpen, MdArrowBack, MdInsertDriveFile, MdAdd, MdRefresh, MdClose, MdPeople, MdContentCopy, MdLink, MdBusiness } from 'react-icons/md';
+import { MdOutlineUpload, MdEdit, MdDelete, MdFolder, MdFolderOpen, MdArrowBack, MdInsertDriveFile, MdAdd, MdRefresh, MdClose, MdPeople, MdContentCopy, MdLink, MdBusiness, MdVisibility } from 'react-icons/md';
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
@@ -119,6 +119,7 @@ export default function ArchivePageClient() {
     const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
     const [downloading, setDownloading] = useState(false);
     const [watermarkedPdfUrl, setWatermarkedPdfUrl] = useState(null);
+    const [isDownloadInProgress, setIsDownloadInProgress] = useState(false);
     const [currentDocumentData, setCurrentDocumentData] = useState(null);
     const [shareSearch, setShareSearch] = useState('');
     const [shareableUsers, setShareableUsers] = useState([]);
@@ -369,6 +370,14 @@ export default function ArchivePageClient() {
         [currentUserUid]
     );
 
+    const isDocumentOwnedByCurrentUser = useCallback(
+        (document) => {
+            const ownerUid = document?.OwnerUID || document?.owner_uid || document?.ownerUid || document?.ownerUID;
+            return !!ownerUid && ownerUid === currentUserUid;
+        },
+        [currentUserUid]
+    );
+
     const fetchEditAccess = useCallback(async (uid, type) => {
         setIsFetchingEditAccess(true);
         try {
@@ -568,16 +577,24 @@ export default function ArchivePageClient() {
     };
 
     const handleDownload = () => {
-        if (typeof window !== 'undefined') {
-            if (watermarkedPdfUrl) {
-                const link = document.createElement('a');
-                link.href = watermarkedPdfUrl;
-                link.setAttribute('download', currentDocumentData.Filename);
-                document.body.appendChild(link);
-                link.click();
-                link.parentNode.removeChild(link);
-            }
+        if (typeof window === 'undefined') return;
+
+        if (!watermarkedPdfUrl) {
+            return;
         }
+
+        setIsDownloadInProgress(true);
+
+        const link = document.createElement('a');
+        link.href = watermarkedPdfUrl;
+        link.setAttribute('download', currentDocumentData?.Filename || 'document.pdf');
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+
+        setTimeout(() => {
+            setIsDownloadInProgress(false);
+        }, 500);
     };
 
     const fetchPdf = async (mediaUid) => {
@@ -1011,6 +1028,11 @@ export default function ArchivePageClient() {
     const handleDeleteClick = async (item, type, e) => {
         if (e) e.stopPropagation();
 
+        if (type === 'document' && !isDocumentOwnedByCurrentUser(item)) {
+            setErrorMessage('Hanya owner file yang dapat menghapus dokumen.');
+            return;
+        }
+
         if (!confirm(`Are you sure you want to delete this ${type}?`)) {
             return;
         }
@@ -1090,262 +1112,11 @@ export default function ArchivePageClient() {
 
     return (
         <div className="container mx-auto">
-            <h1 className="text-2xl font-bold mb-6">Arsip Dokumen</h1>
-
-            <div className="bg-white rounded-lg shadow p-4">
-                {/* Breadcrumb and navigation */}
-                <div className="flex items-center mb-4 space-x-2">
-                    {folderHistory.length > 1 && (
-                        <button
-                            onClick={navigateBack}
-                            className="p-2 rounded-full hover:bg-gray-100"
-                            title="Go back"
-                            disabled={isLoading}
-                        >
-                            <MdArrowBack />
-                        </button>
-                    )}
-
-                    <div className="flex items-center space-x-2 overflow-x-auto">
-                        {folderBreadcrumb.map((item, index) => (
-                            <div key={item.uid || 'root'} className="flex items-center whitespace-nowrap">
-                                {index > 0 && <span className="mx-1 text-gray-400">/</span>}
-                                <span
-                                    className={`cursor-pointer hover:text-blue-500 ${currentFolder === item.uid ? 'font-semibold' : ''}`}
-                                    onClick={() => {
-                                        const newHistory = folderHistory.slice(0, folderHistory.indexOf(item.uid) + 1);
-                                        if (newHistory.length === 0) newHistory.push('');
-                                        setFolderHistory(newHistory);
-                                        setCurrentFolder(item.uid);
-                                        updateBreadcrumb(item.uid);
-                                    }}
-                                >
-                                    {item.Pathname}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-
-                    <button
-                        onClick={async () => {
-                            await fetchFolderContents();
-                        }}
-                        className="ml-auto p-2 rounded-full hover:bg-gray-100"
-                        title="Refresh"
-                        disabled={isLoading}
-                    >
-                        <MdRefresh />
-                    </button>
-                </div>
-
-                {/* Error/success message */}
-                {errorMessage && (
-                    <div className={`mb-4 p-3 rounded ${errorMessage.includes('success') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {errorMessage}
-                    </div>
-                )}
-
-                {/* Upload button and search */}
-                <div className="mb-4 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={handleUploadClick}
-                            className="bg-blue-500 text-white px-4 py-2 rounded flex items-center"
-                            disabled={isLoading || isUploading}
-                        >
-                            <MdOutlineUpload className="mr-2" />
-                            {isUploading ? 'Uploading...' : 'Upload PDF'}
-                        </button>
-
-                        <button
-                            onClick={() => setShowNewFolderModal(true)}
-                            className="bg-green-500 text-white px-4 py-2 rounded flex items-center"
-                            disabled={isLoading}
-                        >
-                            <MdAdd className="mr-2" /> New Folder
-                        </button>
-                    </div>
-
-                    <input
-                        type="file"
-                        id="fileInput"
-                        className="hidden"
-                        accept="application/pdf"
-                        onChange={handleFileChange}
-                    />
-                </div>
-
-                {isLoading ? (
-                    <div className="flex justify-center items-center py-12">
-                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                    </div>
-                ) : (
-                    <>
-                        {/* Folder grid view */}
-                        {folders.length > 0 && (
-                            <div className="mb-6">
-                                <h2 className="text-lg font-semibold mb-2">Folders</h2>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                    {folders.map((folder) => (
-                                        <div
-                                            key={folder.uid || folder.UID}
-                                            className={`flex flex-col items-center p-3 rounded-lg cursor-pointer transition-colors ${selectedItem === (folder.uid || folder.UID) ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
-                                            onClick={() => setSelectedItem(folder.uid || folder.UID)}
-                                            onDoubleClick={() => handleDoubleClick(folder, 'folder')}
-                                        >
-                                            <div className="text-yellow-500 mb-2">
-                                                <MdFolder size={48} />
-                                            </div>
-                                            <div className="text-center text-sm truncate w-full" title={folder.Pathname}>
-                                                {folder.Pathname}
-                                            </div>
-                                                            {selectedItem === (folder.uid || folder.UID) && (
-                                                                <div className="flex mt-2 space-x-2">
-                                                                    {isFolderOwnedByCurrentUser(folder) ? (
-                                                                        <>
-                                                                            <button
-                                                                                className="text-green-500 hover:text-green-700 p-1"
-                                                                                onClick={(e) => handleEditClick(folder, 'folder', e)}
-                                                                            >
-                                                                                <MdEdit size={16} />
-                                                                            </button>
-                                                                            <button
-                                                                                className="text-red-500 hover:text-red-700 p-1"
-                                                                                onClick={(e) => handleDeleteClick(folder, 'folder', e)}
-                                                                            >
-                                                                                <MdDelete size={16} />
-                                                                            </button>
-                                                                        </>
-                                                                    ) : (
-                                                                        <button
-                                                                            className="text-blue-500 hover:text-blue-700 p-1 flex items-center space-x-1"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                navigateToFolder(folder);
-                                                                            }}
-                                                                            title="Lihat detail folder"
-                                                                        >
-                                                                            <MdFolderOpen size={16} />
-                                                                            <span className="text-xs">Detail</span>
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Files section */}
-                        {filteredDocuments.length > 0 ? (
-                            <div>
-                                <h2 className="text-lg font-semibold mb-2">Files</h2>
-                                {viewMode === 'grid' ? (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                        {filteredDocuments.map((doc) => (
-                                            <div
-                                                key={doc.UID || doc.uid}
-                                                className={`flex flex-col items-center p-3 rounded-lg cursor-pointer transition-colors ${selectedItem === (doc.UID || doc.uid) ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
-                                                onClick={() => setSelectedItem(doc.UID || doc.uid)}
-                                                onDoubleClick={() => handleDoubleClick(doc, 'document')}
-                                            >
-                                                <div className="text-red-500 mb-2">
-                                                    <MdInsertDriveFile size={48} />
-                                                </div>
-                                                <div className="text-center text-sm truncate w-full" title={doc.Filename || doc.filename}>
-                                                    {doc.Filename || doc.filename}
-                                                </div>
-                                                {selectedItem === (doc.UID || doc.uid) && (
-                                                    <div className="flex mt-2 space-x-2">
-                                                        <button
-                                                            className="text-green-500 hover:text-green-700 p-1"
-                                                            onClick={(e) => handleEditClick(doc, 'document', e)}
-                                                        >
-                                                            <MdEdit size={16} />
-                                                        </button>
-                                                        <button
-                                                            className="text-red-500 hover:text-red-700 p-1"
-                                                            onClick={(e) => handleDeleteClick(doc, 'document', e)}
-                                                        >
-                                                            <MdDelete size={16} />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead>
-                                                <tr className="bg-gray-50">
-                                                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">File Name</th>
-                                                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Description</th>
-                                                    <th className="px-6 py-3 text-center text-sm font-medium text-gray-700">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-200">
-                                                {filteredDocuments.map((doc) => (
-                                                    <tr
-                                                        key={doc.UID || doc.uid}
-                                                        className={`hover:bg-blue-50 cursor-pointer ${selectedItem === (doc.UID || doc.uid) ? 'bg-blue-100' : ''}`}
-                                                        onClick={() => setSelectedItem(doc.UID || doc.uid)}
-                                                        onDoubleClick={() => handleDoubleClick(doc, 'document')}
-                                                    >
-                                                        <td className="px-6 py-4 text-blue-600 flex items-center">
-                                                            <MdInsertDriveFile className="mr-2 text-red-500" />
-                                                            {doc.Filename || doc.filename}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            {doc.Description || doc.description || ''}
-                                                        </td>
-                                                        <td className="px-6 py-4 flex justify-center space-x-2">
-                                                            <button
-                                                                className="text-green-500 hover:text-green-700"
-                                                                onClick={(e) => handleEditClick(doc, 'document', e)}
-                                                            >
-                                                                <MdEdit size={20} />
-                                                            </button>
-                                                            <button
-                                                                className="text-red-500 hover:text-red-700"
-                                                                onClick={(e) => handleDeleteClick(doc, 'document', e)}
-                                                            >
-                                                                <MdDelete size={20} />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-
-                                {/* Pagination */}
-                                {filteredDocuments.length > 10 && (
-                                    <div className="mt-4 flex justify-end">
-                                        <div className="flex space-x-1">
-                                            <button className="px-3 py-1 border rounded text-gray-500 hover:bg-gray-100">Previous</button>
-                                            <button className="px-3 py-1 border rounded bg-blue-500 text-white">1</button>
-                                            <button className="px-3 py-1 border rounded text-gray-500 hover:bg-gray-100">Next</button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-center py-8 text-gray-500">
-                                {folders.length === 0 ? 'This folder is empty.' : 'No files in this folder.'}
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
-
             {/* New Folder Modal */}
             {showNewFolderModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-5xl">
-                        <h3 className="text-lg font-semibold mb-4">Buat Folder Baru</h3>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{zIndex:9999999}}>
+                    <div className="bg-white rounded-lg px-6 w-full max-w-5xl overflow-y-auto max-h-[90vh]">
+                        <h3 className="text-lg font-semibold pt-6 pb-3 sticky top-0 bg-white" style={{zIndex:9999999}}>Buat Folder Baru</h3>
                         <input
                             type="text"
                             placeholder="Folder Name"
@@ -1561,7 +1332,7 @@ export default function ArchivePageClient() {
                             </div>
                         </div>
 
-                        <div className="flex justify-end space-x-2">
+                        <div className="flex justify-end space-x-2 pb-3">
                             <button
                                 className="px-4 py-2 border rounded text-gray-500 hover:bg-gray-100"
                                 onClick={() => {
@@ -1585,247 +1356,247 @@ export default function ArchivePageClient() {
             {/* Edit Modal */}
             {showEditModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-5xl">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold">
-                                {editItem?.type === 'folder' ? 'Edit Folder' : 'Edit Dokumen'}
-                            </h3>
-                            <button
-                                className="text-gray-500 hover:text-gray-700"
-                                onClick={() => {
-                                    setShowEditModal(false);
-                                    setEditItem(null);
-                                    setEditName('');
-                                }}
-                            >
-                                <MdClose size={24} />
-                            </button>
-                        </div>
+                    <div className="bg-white rounded-lg px-6 w-full max-w-5xl shadow-xl overflow-hidden max-h-[90vh]">
+                        <div className="flex flex-col h-full overflow-y-auto gap-6">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-lg font-semibold pt-6 sticky top-0 bg-white" style={{zIndex:9999999}}>
+                                    {editItem?.type === 'folder' ? 'Edit Folder' : 'Edit Dokumen'}
+                                </h3>
+                                <button
+                                    className="text-gray-500 hover:text-gray-700"
+                                    onClick={() => {
+                                        setShowEditModal(false);
+                                        setEditItem(null);
+                                        setEditName('');
+                                    }}
+                                >
+                                    <MdClose size={24} />
+                                </button>
+                            </div>
 
-                        <div className="grid mb-6">
-                            <div className="space-y-4">
-                                <input
-                                    type="text"
-                                    placeholder="Name"
-                                    className="border rounded px-4 py-2 w-full"
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                />
+                            <div className="grid">
+                                <div className="space-y-4">
+                                    <input
+                                        type="text"
+                                        placeholder="Name"
+                                        className="border rounded px-4 py-2 w-full"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                    />
 
-                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-                                    <div>
-                                        <p className="text-xs uppercase tracking-wide text-gray-500">
-                                            Pemilik {editItem?.type === 'folder' ? 'folder' : 'dokumen'}
-                                        </p>
-                                        <p className="text-sm font-semibold text-gray-900">{editOwnerName}</p>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
                                         <div>
-                                            <p className="text-gray-500">Dibuat</p>
-                                            <p className="font-medium text-gray-900">{editCreatedAt}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500">Terakhir diperbarui</p>
-                                            <p className="font-medium text-gray-900">{editUpdatedAt}</p>
-                                        </div>
-                                    </div>
-
-                                    {editItem?.type === 'folder' && (
-                                        <div className="border-t border-gray-200 pt-3">
-                                            <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                                <MdLink className="text-gray-500" /> Link folder
+                                            <p className="text-xs uppercase tracking-wide text-gray-500">
+                                                Pemilik {editItem?.type === 'folder' ? 'folder' : 'dokumen'}
                                             </p>
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="text"
-                                                    readOnly
-                                                    value={editLinkPreview || 'Link tidak tersedia untuk folder ini.'}
-                                                    className="flex-1 border rounded px-3 py-2 text-xs text-gray-700 bg-white"
-                                                />
+                                            <p className="text-sm font-semibold text-gray-900">{editOwnerName}</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                            <div>
+                                                <p className="text-gray-500">Dibuat</p>
+                                                <p className="font-medium text-gray-900">{editCreatedAt}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-500">Terakhir diperbarui</p>
+                                                <p className="font-medium text-gray-900">{editUpdatedAt}</p>
+                                            </div>
+                                        </div>
+
+                                        {editItem?.type === 'folder' && (
+                                            <div className="border-t border-gray-200 pt-3">
+                                                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                    <MdLink className="text-gray-500" /> Link folder
+                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={editLinkPreview || 'Link tidak tersedia untuk folder ini.'}
+                                                        className="flex-1 border rounded px-3 py-2 text-xs text-gray-700 bg-white"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className="p-2 border rounded text-gray-600 hover:bg-gray-100 disabled:opacity-40"
+                                                        onClick={handleCopyEditLink}
+                                                        disabled={!editLinkPreview}
+                                                    >
+                                                        <MdContentCopy size={18} />
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {editLinkCopied ? 'Link berhasil disalin.' : 'UID folder akan tetap sama setelah disimpan.'}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="space-y-5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-semibold text-gray-700">
+                                            Daftar akses pengguna
+                                        </label>
+                                        {isFetchingShareUsers && (
+                                            <span className="text-xs text-gray-400">Memuat user...</span>
+                                        )}
+                                    </div>
+                                    <div className="mt-3">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex flex-col sm:flex-row gap-2">
+                                                <div className="relative flex-1">
+                                                    <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
+                                                        <MdPeople size={18} />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                                        placeholder="Ketik nama atau username"
+                                                        value={editShareSearch}
+                                                        onChange={(e) => setEditShareSearch(e.target.value)}
+                                                        onKeyDown={handleEditShareInputKeyDown}
+                                                    />
+                                                    {editShareSuggestions.length > 0 && (
+                                                        <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
+                                                            {editShareSuggestions.map((user) => (
+                                                                <button
+                                                                    key={user.UID || user.uid}
+                                                                    type="button"
+                                                                    className="w-full text-left px-3 py-2 hover:bg-blue-50"
+                                                                    onMouseDown={(event) => event.preventDefault()}
+                                                                    onClick={() => handleEditSelectShareSuggestion(user)}
+                                                                >
+                                                                    <p className="text-sm font-medium text-gray-900">{user.Name || user.name || 'Tanpa nama'}</p>
+                                                                    <p className="text-xs text-gray-500">{user.Username || user.Email || user.email || user.uid}</p>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 <button
                                                     type="button"
-                                                    className="p-2 border rounded text-gray-600 hover:bg-gray-100 disabled:opacity-40"
-                                                    onClick={handleCopyEditLink}
-                                                    disabled={!editLinkPreview}
+                                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    onClick={handleAddEditShareUserFromInput}
+                                                    disabled={editShareSuggestions.length === 0}
                                                 >
-                                                    <MdContentCopy size={18} />
+                                                    Tambahkan
                                                 </button>
                                             </div>
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                {editLinkCopied ? 'Link berhasil disalin.' : 'UID folder akan tetap sama setelah disimpan.'}
+                                            <p className="text-xs text-gray-500">
+                                                Tambahkan pengguna yang dapat mengakses item ini
                                             </p>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                            <div className="space-y-5">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-semibold text-gray-700">
-                                        Daftar akses pengguna
-                                    </label>
-                                    {isFetchingShareUsers && (
-                                        <span className="text-xs text-gray-400">Memuat user...</span>
-                                    )}
-                                </div>
-                                <div className="mt-3">
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                            <div className="relative flex-1">
-                                                <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
-                                                    <MdPeople size={18} />
+                                        <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                                            {editAccessUsers.length === 0 ? (
+                                                <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
+                                                    Belum ada user yang ditambahkan.
                                                 </div>
-                                                <input
-                                                    type="text"
-                                                    className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
-                                                    placeholder="Ketik nama atau username"
-                                                    value={editShareSearch}
-                                                    onChange={(e) => setEditShareSearch(e.target.value)}
-                                                    onKeyDown={handleEditShareInputKeyDown}
-                                                />
-                                                {editShareSuggestions.length > 0 && (
-                                                    <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
-                                                        {editShareSuggestions.map((user) => (
-                                                            <button
-                                                                key={user.UID || user.uid}
-                                                                type="button"
-                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50"
-                                                                onMouseDown={(event) => event.preventDefault()}
-                                                                onClick={() => handleEditSelectShareSuggestion(user)}
-                                                            >
-                                                                <p className="text-sm font-medium text-gray-900">{user.Name || user.name || 'Tanpa nama'}</p>
-                                                                <p className="text-xs text-gray-500">{user.Username || user.Email || user.email || user.uid}</p>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                                                onClick={handleAddEditShareUserFromInput}
-                                                disabled={editShareSuggestions.length === 0}
-                                            >
-                                                Tambahkan
-                                            </button>
-                                        </div>
-                                        <p className="text-xs text-gray-500">
-                                            Tambahkan pengguna yang dapat mengakses item ini
-                                        </p>
-                                    </div>
-                                    <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
-                                        {editAccessUsers.length === 0 ? (
-                                            <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
-                                                Belum ada user yang ditambahkan.
-                                            </div>
-                                        ) : (
-                                            editAccessUsers.map((user) => (
-                                                <div
-                                                    key={getAccessKey(user)}
-                                                    className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
-                                                >
-                                                    <div>
-                                                        <p className="text-xs font-medium text-gray-900">{formatAccessUserLabel(user)}</p>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        className="text-xs text-red-500 hover:text-red-600"
-                                                        onClick={() => handleEditRemoveShareUser(user.UID || user.uid)}
+                                            ) : (
+                                                editAccessUsers.map((user) => (
+                                                    <div
+                                                        key={getAccessKey(user)}
+                                                        className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
                                                     >
-                                                        Hapus
-                                                    </button>
-                                                </div>
-                                            ))
+                                                        <div>
+                                                            <p className="text-xs font-medium text-gray-900">{formatAccessUserLabel(user)}</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="text-xs text-red-500 hover:text-red-600"
+                                                            onClick={() => handleEditRemoveShareUser(user.UID || user.uid)}
+                                                        >
+                                                            Hapus
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-semibold text-gray-700">
+                                            Daftar akses organisasi
+                                        </label>
+                                        {isFetchingShareOrganizations && (
+                                            <span className="text-xs text-gray-400">Memuat organisasi...</span>
                                         )}
                                     </div>
-                                </div>
-                            </div>
-                            <div className="space-y-5">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-semibold text-gray-700">
-                                        Daftar akses organisasi
-                                    </label>
-                                    {isFetchingShareOrganizations && (
-                                        <span className="text-xs text-gray-400">Memuat organisasi...</span>
-                                    )}
-                                </div>
-                                <div className="mt-3">
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                            <div className="relative flex-1">
-                                                <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
-                                                    <MdBusiness size={18} />
-                                                </div>
-                                                <input
-                                                    type="text"
-                                                    className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
-                                                    placeholder="Ketik nama organisasi"
-                                                    value={editShareOrgSearch}
-                                                    onChange={(e) => setEditShareOrgSearch(e.target.value)}
-                                                    onKeyDown={handleEditShareOrgInputKeyDown}
-                                                />
-                                                {editOrganizationSuggestions.length > 0 && (
-                                                    <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
-                                                        {editOrganizationSuggestions.map((organization) => (
-                                                            <button
-                                                                key={organization.UID || organization.uid}
-                                                                type="button"
-                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50"
-                                                                onMouseDown={(event) => event.preventDefault()}
-                                                                onClick={() => handleEditSelectShareOrganization(organization)}
-                                                            >
-                                                                <p className="text-sm font-medium text-gray-900">{organization.Name || organization.name || 'Tanpa nama'}</p>
-                                                                
-                                                            </button>
-                                                        ))}
+                                    <div className="mt-3">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex flex-col sm:flex-row gap-2">
+                                                <div className="relative flex-1">
+                                                    <div className="absolute inset-y-0 left-0 pl-2 pb-0.5 flex items-center pointer-events-none text-gray-400">
+                                                        <MdBusiness size={18} />
                                                     </div>
-                                                )}
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                                                onClick={handleAddEditShareOrganizationFromInput}
-                                                disabled={editOrganizationSuggestions.length === 0}
-                                            >
-                                                Tambahkan
-                                            </button>
-                                        </div>
-                                        <p className="text-xs text-gray-500">
-                                            Seluruh anggota organisasi yang dipilih akan otomatis mewarisi akses.
-                                        </p>
-                                    </div>
-                                    <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
-                                        {editAccessOrganizations.length === 0 ? (
-                                            <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
-                                                Belum ada organisasi yang ditambahkan.
-                                            </div>
-                                        ) : (
-                                            editAccessOrganizations.map((organization) => (
-                                                <div
-                                                    key={getAccessKey(organization)}
-                                                    className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
+                                                    <input
+                                                        type="text"
+                                                        className="border rounded px-8 py-2 w-full text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                                        placeholder="Ketik nama organisasi"
+                                                        value={editShareOrgSearch}
+                                                        onChange={(e) => setEditShareOrgSearch(e.target.value)}
+                                                        onKeyDown={handleEditShareOrgInputKeyDown}
+                                                    />
+                                                    {editOrganizationSuggestions.length > 0 && (
+                                                        <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-48 overflow-y-auto">
+                                                            {editOrganizationSuggestions.map((organization) => (
+                                                                <button
+                                                                    key={organization.UID || organization.uid}
+                                                                    type="button"
+                                                                    className="w-full text-left px-3 py-2 hover:bg-blue-50"
+                                                                    onMouseDown={(event) => event.preventDefault()}
+                                                                    onClick={() => handleEditSelectShareOrganization(organization)}
+                                                                >
+                                                                    <p className="text-sm font-medium text-gray-900">{organization.Name || organization.name || 'Tanpa nama'}</p>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    onClick={handleAddEditShareOrganizationFromInput}
+                                                    disabled={editOrganizationSuggestions.length === 0}
                                                 >
-                                                    <div>
-                                                        <p className="text-xs font-medium text-gray-900">{formatAccessOrgLabel(organization)}</p>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        className="text-xs text-red-500 hover:text-red-600"
-                                                        onClick={() => handleEditRemoveShareOrganization(organization.UID || organization.uid)}
-                                                    >
-                                                        Hapus
-                                                    </button>
+                                                    Tambahkan
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                                Seluruh anggota organisasi yang dipilih akan otomatis mewarisi akses.
+                                            </p>
+                                        </div>
+                                        <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                                            {editAccessOrganizations.length === 0 ? (
+                                                <div className="border border-dashed border-gray-300 rounded px-3 py-2 text-xs text-gray-500">
+                                                    Belum ada organisasi yang ditambahkan.
                                                 </div>
-                                            ))
-                                        )}
+                                            ) : (
+                                                editAccessOrganizations.map((organization) => (
+                                                    <div
+                                                        key={getAccessKey(organization)}
+                                                        className="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white"
+                                                    >
+                                                        <div>
+                                                            <p className="text-xs font-medium text-gray-900">{formatAccessOrgLabel(organization)}</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="text-xs text-red-500 hover:text-red-600"
+                                                            onClick={() => handleEditRemoveShareOrganization(organization.UID || organization.uid)}
+                                                        >
+                                                            Hapus
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="space-y-4 mt-3 mb-3">
+                            <div className="space-y-4 pb-3">
                                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2 text-xs text-gray-500">
                                     <p className="font-semibold text-gray-900">Catatan</p>
                                     <p>
@@ -1835,23 +1606,24 @@ export default function ArchivePageClient() {
                                 </div>
                             </div>
 
-                        <div className="flex justify-end space-x-2">
-                            <button
-                                className="px-4 py-2 border rounded text-gray-500 hover:bg-gray-100"
-                                onClick={() => {
-                                    setShowEditModal(false);
-                                    setEditItem(null);
-                                    setEditName('');
-                                }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                onClick={handleEditSave}
-                            >
-                                Save
-                            </button>
+                            <div className="flex justify-end space-x-2 pb-4 px-6">
+                                <button
+                                    className="px-4 py-2 border rounded text-gray-500 hover:bg-gray-100"
+                                    onClick={() => {
+                                        setShowEditModal(false);
+                                        setEditItem(null);
+                                        setEditName('');
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    onClick={handleEditSave}
+                                >
+                                    Save
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1884,11 +1656,16 @@ export default function ArchivePageClient() {
                             ) : pdfBlobUrl ? (
                                 <div style={{ marginTop: '20px' }}>
                                     <button
-                                        className={'p-3 text-sm font-semibold ' + (downloading ? "bg-gray-100 text-gray-300" : "bg-blue-100")}
+                                        className={'p-3 text-sm font-semibold ' + (isDownloadInProgress ? 'bg-gray-100 text-gray-300' : 'bg-blue-100')}
                                         onClick={handleDownload}
-                                        disabled={downloading}
+                                        disabled={downloading || isDownloadInProgress}
                                     >
-                                        {downloading ? "Downloading..." : "Download Lampiran"}
+                                        <span className="flex items-center justify-center">
+                                            {isDownloadInProgress ? 'Menyiapkan download...' : 'Download Lampiran'}
+                                            {isDownloadInProgress && (
+                                                <span className="ml-2 inline-flex h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                            )}
+                                        </span>
                                     </button>
                                     <h3>PDF Preview:</h3>
                                     <Worker workerUrl={`https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`}>
@@ -1911,6 +1688,270 @@ export default function ArchivePageClient() {
                     </div>
                 </div>
             )}
+
+            <h1 className="text-2xl font-bold mb-6">Arsip Dokumen</h1>
+
+            <div className="bg-white rounded-lg shadow p-4">
+                {/* Breadcrumb and navigation */}
+                <div className="flex items-center mb-4 space-x-2">
+                    {folderHistory.length > 1 && (
+                        <button
+                            onClick={navigateBack}
+                            className="p-2 rounded-full hover:bg-gray-100"
+                            title="Go back"
+                            disabled={isLoading}
+                        >
+                            <MdArrowBack />
+                        </button>
+                    )}
+
+                    <div className="flex items-center space-x-2 overflow-x-auto">
+                        {folderBreadcrumb.map((item, index) => (
+                            <div key={item.uid || 'root'} className="flex items-center whitespace-nowrap">
+                                {index > 0 && <span className="mx-1 text-gray-400">/</span>}
+                                <span
+                                    className={`cursor-pointer hover:text-blue-500 ${currentFolder === item.uid ? 'font-semibold' : ''}`}
+                                    onClick={() => {
+                                        const newHistory = folderHistory.slice(0, folderHistory.indexOf(item.uid) + 1);
+                                        if (newHistory.length === 0) newHistory.push('');
+                                        setFolderHistory(newHistory);
+                                        setCurrentFolder(item.uid);
+                                        updateBreadcrumb(item.uid);
+                                    }}
+                                >
+                                    {item.Pathname}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <button
+                        onClick={async () => {
+                            await fetchFolderContents();
+                        }}
+                        className="ml-auto p-2 rounded-full hover:bg-gray-100"
+                        title="Refresh"
+                        disabled={isLoading}
+                    >
+                        <MdRefresh />
+                    </button>
+                </div>
+
+                {/* Error/success message */}
+                {errorMessage && (
+                    <div className={`mb-4 p-3 rounded ${errorMessage.includes('success') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {errorMessage}
+                    </div>
+                )}
+
+                {/* Upload button and search */}
+                <div className="mb-4 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="flex space-x-2">
+                        <button
+                            onClick={handleUploadClick}
+                            className="bg-blue-500 text-white px-4 py-2 rounded flex items-center"
+                            disabled={isLoading || isUploading}
+                        >
+                            <MdOutlineUpload className="mr-2" />
+                            {isUploading ? 'Uploading...' : 'Upload PDF'}
+                        </button>
+
+                        <button
+                            onClick={() => setShowNewFolderModal(true)}
+                            className="bg-green-500 text-white px-4 py-2 rounded flex items-center"
+                            disabled={isLoading}
+                        >
+                            <MdAdd className="mr-2" /> New Folder
+                        </button>
+                    </div>
+
+                    <input
+                        type="file"
+                        id="fileInput"
+                        className="hidden"
+                        accept="application/pdf"
+                        onChange={handleFileChange}
+                    />
+                </div>
+
+                {isLoading ? (
+                    <div className="flex justify-center items-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Folder grid view */}
+                        {folders.length > 0 && (
+                            <div className="mb-6">
+                                <h2 className="text-lg font-semibold mb-2">Folders</h2>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                    {folders.map((folder) => (
+                                        <div
+                                            key={folder.uid || folder.UID}
+                                            className={`flex flex-col items-center p-3 rounded-lg cursor-pointer transition-colors ${selectedItem === (folder.uid || folder.UID) ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
+                                            onClick={() => setSelectedItem(folder.uid || folder.UID)}
+                                            onDoubleClick={() => handleDoubleClick(folder, 'folder')}
+                                        >
+                                            <div className="text-yellow-500 mb-2">
+                                                <MdFolder size={48} />
+                                            </div>
+                                            <div className="text-center text-sm truncate w-full" title={folder.Pathname}>
+                                                {folder.Pathname}
+                                            </div>
+                                                            {selectedItem === (folder.uid || folder.UID) && (
+                                                                <div className="flex mt-2 space-x-2">
+                                                                    {isFolderOwnedByCurrentUser(folder) ? (
+                                                                        <>
+                                                                            <button
+                                                                                className="text-green-500 hover:text-green-700 p-1"
+                                                                                onClick={(e) => handleEditClick(folder, 'folder', e)}
+                                                                            >
+                                                                                <MdEdit size={16} />
+                                                                            </button>
+                                                                            <button
+                                                                                className="text-red-500 hover:text-red-700 p-1"
+                                                                                onClick={(e) => handleDeleteClick(folder, 'folder', e)}
+                                                                            >
+                                                                                <MdDelete size={16} />
+                                                                            </button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <button
+                                                                            className="text-blue-500 hover:text-blue-700 p-1 flex items-center space-x-1"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                navigateToFolder(folder);
+                                                                            }}
+                                                                            title="Lihat detail folder"
+                                                                        >
+                                                                            <MdFolderOpen size={16} />
+                                                                            <span className="text-xs">Detail</span>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Files section */}
+                        {filteredDocuments.length > 0 ? (
+                            <div>
+                                <h2 className="text-lg font-semibold mb-2">Files</h2>
+                                {viewMode === 'grid' ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                        {filteredDocuments.map((doc) => (
+                                            <div
+                                                key={doc.UID || doc.uid}
+                                                className={`flex flex-col items-center p-3 rounded-lg cursor-pointer transition-colors ${selectedItem === (doc.UID || doc.uid) ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
+                                                onClick={() => setSelectedItem(doc.UID || doc.uid)}
+                                                onDoubleClick={() => handleDoubleClick(doc, 'document')}
+                                            >
+                                                <div className="text-red-500 mb-2">
+                                                    <MdInsertDriveFile size={48} />
+                                                </div>
+                                                <div className="text-center text-sm truncate w-full" title={doc.Filename || doc.filename}>
+                                                    {doc.Filename || doc.filename}
+                                                </div>
+                                                {selectedItem === (doc.UID || doc.uid) && (
+                                                    <div className="flex mt-2 space-x-2">
+                                                        <button
+                                                            className="text-blue-500 hover:text-blue-700 p-1"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleViewDocument(doc);
+                                                            }}
+                                                            title="View document"
+                                                        >
+                                                            <MdVisibility size={16} />
+                                                        </button>
+                                                        {isDocumentOwnedByCurrentUser(doc) && (
+                                                            <button
+                                                                className="text-red-500 hover:text-red-700 p-1"
+                                                                onClick={(e) => handleDeleteClick(doc, 'document', e)}
+                                                            >
+                                                                <MdDelete size={16} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-gray-50">
+                                                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">File Name</th>
+                                                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Description</th>
+                                                    <th className="px-6 py-3 text-center text-sm font-medium text-gray-700">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-200">
+                                                {filteredDocuments.map((doc) => (
+                                                    <tr
+                                                        key={doc.UID || doc.uid}
+                                                        className={`hover:bg-blue-50 cursor-pointer ${selectedItem === (doc.UID || doc.uid) ? 'bg-blue-100' : ''}`}
+                                                        onClick={() => setSelectedItem(doc.UID || doc.uid)}
+                                                        onDoubleClick={() => handleDoubleClick(doc, 'document')}
+                                                    >
+                                                        <td className="px-6 py-4 text-blue-600 flex items-center">
+                                                            <MdInsertDriveFile className="mr-2 text-red-500" />
+                                                            {doc.Filename || doc.filename}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            {doc.Description || doc.description || ''}
+                                                        </td>
+                                                        <td className="px-6 py-4 flex justify-center space-x-2">
+                                                            <button
+                                                                className="text-blue-500 hover:text-blue-700"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleViewDocument(doc);
+                                                                }}
+                                                            >
+                                                                <MdVisibility size={20} />
+                                                            </button>
+                                                            {isDocumentOwnedByCurrentUser(doc) && (
+                                                                <button
+                                                                    className="text-red-500 hover:text-red-700"
+                                                                    onClick={(e) => handleDeleteClick(doc, 'document', e)}
+                                                                >
+                                                                    <MdDelete size={20} />
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {/* Pagination */}
+                                {filteredDocuments.length > 10 && (
+                                    <div className="mt-4 flex justify-end">
+                                        <div className="flex space-x-1">
+                                            <button className="px-3 py-1 border rounded text-gray-500 hover:bg-gray-100">Previous</button>
+                                            <button className="px-3 py-1 border rounded bg-blue-500 text-white">1</button>
+                                            <button className="px-3 py-1 border rounded text-gray-500 hover:bg-gray-100">Next</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-gray-500">
+                                {folders.length === 0 ? 'This folder is empty.' : 'No files in this folder.'}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            
         </div>
     );
 }
