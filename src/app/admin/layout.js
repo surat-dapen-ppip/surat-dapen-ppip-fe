@@ -4,7 +4,7 @@ import Dropdown from '@/components/dropdown';
 import SidebarDropdown from '@/components/sidebarDropdown';
 import Link from 'next/link';
 import Image from 'next/image';
-import { MdArchive, MdMenu, MdClose, MdNotifications, MdOutlineAllInbox, MdOutlineMail, MdOutlineQueryBuilder, MdOutlineSettings, MdSettings, MdSpaceDashboard, MdSwitchAccount } from "react-icons/md";
+import { MdArchive, MdMenu, MdClose, MdNotifications, MdOutlineAllInbox, MdOutlineMail, MdOutlineQueryBuilder, MdOutlineSettings, MdSettings, MdSpaceDashboard, MdSwitchAccount, MdPanTool, MdBuild } from "react-icons/md";
 import { useRouter } from 'next/navigation';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
 import { useState, useEffect } from 'react';
@@ -193,6 +193,16 @@ export default function Layout({ children }) {
                                     />
                                 </li>
                             )}
+                            <li>
+                                <Link href="/admin/tools" onClick={() => isMobile && setSidebarOpen(false)}>
+                                    <div className="flex items-center py-3 pl-4 md:pl-6 hover:bg-gray-50">
+                                        <MdBuild className="text-gray-400" />
+                                        <div className="ml-4 text-sm font-semibold text-gray-700">
+                                            Tools
+                                        </div>
+                                    </div>
+                                </Link>
+                            </li>
                             <li>
                                 <Link href="/admin/account" onClick={() => isMobile && setSidebarOpen(false)}>
                                     <div className="flex items-center py-3 pl-4 md:pl-6 hover:bg-gray-50">

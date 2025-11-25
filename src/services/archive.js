@@ -82,6 +82,15 @@ export const getDirectoryByUid = async (uid, ownerUID) => {
     }
 };
 
+export const getDirectoryInfoByUid = async (uid) => {
+    try {
+        const response = await axiosInstance.get(`/archive/directory/_info/${uid}`);
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || error;
+    }
+};
+
 /**
  * Update directory
  * @param {string} uid - Directory UID

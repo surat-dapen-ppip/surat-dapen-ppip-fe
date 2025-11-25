@@ -11,7 +11,8 @@ import {
     updateDirectory,
     deleteDocument,
     updateDocument,
-    getDocumentByUid
+    getDocumentByUid,
+    getDirectoryInfoByUid
 } from '@/services/archive';
 import { getDirectoryAccess, getDocumentAccess } from '@/services/access';
 import { getUsers } from '@/services/users';
@@ -134,6 +135,7 @@ export default function ArchivePageClient() {
     const searchParams = useSearchParams();
     const folderParam = searchParams?.get('folder') || '';
     const [currentUserInfo, setCurrentUserInfo] = useState({ name: '', uid: '' });
+    const [currentFolderInfo, setCurrentFolderInfo] = useState({ created: '-', name: '-', ownerUID: '' });
     const [folderMetaPreview, setFolderMetaPreview] = useState({ created: '', updated: '' });
     const [appOrigin, setAppOrigin] = useState('');
     const [linkCopied, setLinkCopied] = useState(false);
@@ -142,6 +144,11 @@ export default function ArchivePageClient() {
     const [editAccessOrganizations, setEditAccessOrganizations] = useState([]);
     const [isFetchingEditAccess, setIsFetchingEditAccess] = useState(false);
 
+
+    useEffect(() => {
+        console.log(currentUserInfo)
+        console.log(currentFolderInfo)
+    }, [currentUserInfo, currentFolderInfo])
 
     // Update breadcrumb when current folder changes
     const updateBreadcrumb = useCallback(async (folderId) => {
@@ -159,16 +166,16 @@ export default function ArchivePageClient() {
                 let ownerUID = localStorage.getItem('UserUID');
 
                 const folderResponse = await getDirectoryByUid(currentId, ownerUID);
+                console.log('fs', folderResponse)
                 if (folderResponse && folderResponse.data) {
                     const folder = folderResponse.data;
-                    path.unshift({ uid: folder.uid, Pathname: folder.Pathname });
-                    currentId = folder.parent_uid;
+                    path.unshift({ uid: folder.UID, Pathname: folder.Pathname });
+                    currentId = folder.ParentUID;
                 } else {
                     break;
                 }
             }
 
-            // Add root at the beginning
             path.unshift({ uid: '', Pathname: 'Root' });
             setFolderBreadcrumb(path);
         } catch (error) {
@@ -176,7 +183,7 @@ export default function ArchivePageClient() {
         }
     }, []);
 
-    
+
     // Fetch directories and documents on component mount
     useEffect(() => {
         const initializeArchive = async () => {
@@ -427,11 +434,29 @@ export default function ArchivePageClient() {
         const ownerUid = localStorage.getItem('UserUID');
 
         try {
+            // fetch folder info 
+            if (currentFolder != "") {
+                const infoResponse = await getDirectoryInfoByUid(currentFolder);
+                if (infoResponse && infoResponse.data) {
+                    setCurrentFolderInfo({
+                        created: infoResponse.data.CreatedAt,
+                        name: infoResponse.data.owner_username,
+                        ownerUID: infoResponse.data.OwnerUID
+                    });
+                }
+            }else{
+                setCurrentFolderInfo({
+                    created: "",
+                    name: "",
+                    ownerUID: ""
+                });
+            }
+
+
             // Fetch subdirectories
 
             const dirResponse = await getChildDirectories(currentFolder, ownerUid);
             if (dirResponse && dirResponse.data) {
-                console.log('Folders received:', dirResponse.data);
                 // Ensure each folder has a UID property
                 const foldersWithUIDs = dirResponse.data.map(folder => {
                     if (!folder.UID && folder.uid) {
@@ -450,7 +475,6 @@ export default function ArchivePageClient() {
                 // Use getDocuments service instead of direct axios call
                 const docResponse = await getDocuments(currentFolder, ownerUid);
                 if (docResponse && docResponse.data) {
-                    console.log('Documents received:', docResponse.data);
                     setDocuments(docResponse.data);
                 } else {
                     setDocuments([]);
@@ -476,7 +500,7 @@ export default function ArchivePageClient() {
         fetcher()
     }, [currentFolder, fetchFolderContents]);
 
-    
+
     const editOwnerName = useMemo(() => {
         if (editItem?.OwnerName) return editItem.OwnerName;
         if (editItem?.owner_name) return editItem.owner_name;
@@ -514,7 +538,6 @@ export default function ArchivePageClient() {
     const navigateToFolder = async (folder) => {
         try {
             const folderId = folder.uid || folder.UID;
-            console.log('Navigating to folder:', folder, 'with ID:', folderId);
 
             if (!folderId) {
                 console.error('Folder is missing UID:', folder);
@@ -560,7 +583,6 @@ export default function ArchivePageClient() {
             // Get document details by UID
             const docResponse = await getDocumentByUid(docUid);
             if (docResponse && docResponse.data) {
-                console.log('Document details:', docResponse.data);
                 setCurrentDocumentData(docResponse.data);
 
                 // Set selected item and show modal
@@ -694,7 +716,6 @@ export default function ArchivePageClient() {
             setWatermarkedPdfUrl(modifiedPdfUrl);
         } catch (error) {
             setPdfBlobUrl(null);
-            console.log(error)
             setErrorMessage('Failed to download PDF file. Please try again.');
         } finally {
             setDownloading(false);
@@ -902,18 +923,12 @@ export default function ArchivePageClient() {
             const response = await createDirectory(requestPayload);
 
             if (response && response.data) {
-                console.log('New folder created:', response.data);
 
                 // Refresh the folder contents
                 const dirResponse = await getChildDirectories(currentFolder, ownerUid);
                 if (dirResponse && dirResponse.data) {
-                    console.log('Folders received after create:', dirResponse.data);
                     // Ensure each folder has a UID property
                     const foldersWithUIDs = dirResponse.data.map(folder => {
-                        // Check if this is the newly created folder
-                        if (folder.Pathname === newFolderName) {
-                            console.log('Found newly created folder:', folder);
-                        }
 
                         if (!folder.UID && folder.uid) {
                             return { ...folder, UID: folder.uid };
@@ -939,8 +954,6 @@ export default function ArchivePageClient() {
 
     const handleEditClick = (item, type, e) => {
         if (e) e.stopPropagation();
-
-        console.log('Edit item:', item);
         const itemUid = item.UID || item.uid;
         if (!itemUid) {
             console.error('Item missing UID:', item);
@@ -967,7 +980,6 @@ export default function ArchivePageClient() {
 
         try {
             if (editItem.type === 'folder') {
-                console.log('Updating directory with UID:', editItem.uid);
                 if (!editItem.uid) {
                     throw new Error('Cannot update directory: missing UID');
                 }
@@ -993,7 +1005,6 @@ export default function ArchivePageClient() {
                 // Refresh folders
                 const dirResponse = await getChildDirectories(currentFolder, ownerUid);
                 if (dirResponse && dirResponse.data) {
-                    console.log('Folders received after update:', dirResponse.data);
                     // Ensure each folder has a UID property
                     const foldersWithUIDs = dirResponse.data.map(folder => {
                         if (!folder.UID && folder.uid) {
@@ -1045,7 +1056,6 @@ export default function ArchivePageClient() {
         try {
             if (type === 'folder') {
                 const folderUid = item.UID || item.uid;
-                console.log('Deleting folder with UID:', folderUid, 'Item:', item);
 
                 if (!folderUid) {
                     throw new Error('Cannot delete folder: missing UID');
@@ -1056,7 +1066,6 @@ export default function ArchivePageClient() {
                 // Refresh folders
                 const dirResponse = await getChildDirectories(currentFolder, ownerUid);
                 if (dirResponse && dirResponse.data) {
-                    console.log('Folders received after delete:', dirResponse.data);
                     // Ensure each folder has a UID property
                     const foldersWithUIDs = dirResponse.data.map(folder => {
                         if (!folder.UID && folder.uid) {
@@ -1114,9 +1123,9 @@ export default function ArchivePageClient() {
         <div className="container mx-auto">
             {/* New Folder Modal */}
             {showNewFolderModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{zIndex:9999999}}>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ zIndex: 9999999 }}>
                     <div className="bg-white rounded-lg px-6 w-full max-w-5xl overflow-y-auto max-h-[90vh]">
-                        <h3 className="text-lg font-semibold pt-6 pb-3 sticky top-0 bg-white" style={{zIndex:9999999}}>Buat Folder Baru</h3>
+                        <h3 className="text-lg font-semibold pt-6 pb-3 sticky top-0 bg-white" style={{ zIndex: 9999999 }}>Buat Folder Baru</h3>
                         <input
                             type="text"
                             placeholder="Folder Name"
@@ -1359,7 +1368,7 @@ export default function ArchivePageClient() {
                     <div className="bg-white rounded-lg px-6 w-full max-w-5xl shadow-xl overflow-hidden max-h-[90vh]">
                         <div className="flex flex-col h-full overflow-y-auto gap-6">
                             <div className="flex justify-between items-center">
-                                <h3 className="text-lg font-semibold pt-6 sticky top-0 bg-white" style={{zIndex:9999999}}>
+                                <h3 className="text-lg font-semibold pt-6 sticky top-0 bg-white" style={{ zIndex: 9999999 }}>
                                     {editItem?.type === 'folder' ? 'Edit Folder' : 'Edit Dokumen'}
                                 </h3>
                                 <button
@@ -1693,48 +1702,55 @@ export default function ArchivePageClient() {
 
             <div className="bg-white rounded-lg shadow p-4">
                 {/* Breadcrumb and navigation */}
-                <div className="flex items-center mb-4 space-x-2">
-                    {folderHistory.length > 1 && (
+                <div className='flex justify-between items-center'>
+                    <div className="flex items-center mb-4 space-x-2">
+                        {folderHistory.length > 1 && (
+                            <button
+                                onClick={navigateBack}
+                                className="p-2 rounded-full hover:bg-gray-100"
+                                title="Go back"
+                                disabled={isLoading}
+                            >
+                                <MdArrowBack />
+                            </button>
+                        )}
+
+                        <div className="flex items-center space-x-2 overflow-x-auto">
+                            {folderBreadcrumb.map((item, index) => (
+                                <div key={item.uid || 'root'} className="flex items-center whitespace-nowrap">
+                                    {index > 0 && <span className="mx-1 text-gray-400">/</span>}
+                                    <span
+                                        className={`cursor-pointer hover:text-blue-500 ${currentFolder === item.uid ? 'font-semibold' : ''}`}
+                                        onClick={() => {
+                                            const newHistory = folderHistory.slice(0, folderHistory.indexOf(item.uid) + 1);
+                                            if (newHistory.length === 0) newHistory.push('');
+                                            setFolderHistory(newHistory);
+                                            setCurrentFolder(item.uid);
+                                            updateBreadcrumb(item.uid);
+                                        }}
+                                    >
+                                        {item.Pathname}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
                         <button
-                            onClick={navigateBack}
-                            className="p-2 rounded-full hover:bg-gray-100"
-                            title="Go back"
+                            onClick={async () => {
+                                await fetchFolderContents();
+                            }}
+                            className="ml-auto p-2 rounded-full hover:bg-gray-100"
+                            title="Refresh"
                             disabled={isLoading}
                         >
-                            <MdArrowBack />
+                            <MdRefresh />
                         </button>
-                    )}
-
-                    <div className="flex items-center space-x-2 overflow-x-auto">
-                        {folderBreadcrumb.map((item, index) => (
-                            <div key={item.uid || 'root'} className="flex items-center whitespace-nowrap">
-                                {index > 0 && <span className="mx-1 text-gray-400">/</span>}
-                                <span
-                                    className={`cursor-pointer hover:text-blue-500 ${currentFolder === item.uid ? 'font-semibold' : ''}`}
-                                    onClick={() => {
-                                        const newHistory = folderHistory.slice(0, folderHistory.indexOf(item.uid) + 1);
-                                        if (newHistory.length === 0) newHistory.push('');
-                                        setFolderHistory(newHistory);
-                                        setCurrentFolder(item.uid);
-                                        updateBreadcrumb(item.uid);
-                                    }}
-                                >
-                                    {item.Pathname}
-                                </span>
-                            </div>
-                        ))}
                     </div>
 
-                    <button
-                        onClick={async () => {
-                            await fetchFolderContents();
-                        }}
-                        className="ml-auto p-2 rounded-full hover:bg-gray-100"
-                        title="Refresh"
-                        disabled={isLoading}
-                    >
-                        <MdRefresh />
-                    </button>
+                    <div className='text-sm text-gray-500'>
+                        dibuat oleh : <span className='font-medium text-gray-900'>{currentFolderInfo.name ? currentFolderInfo.name : currentUserInfo.name}</span>,
+                        pada : <span className='font-medium text-gray-900'>{currentFolderInfo.created ? new Date(currentFolderInfo.created).toLocaleDateString() : '-'}</span>
+                    </div>
                 </div>
 
                 {/* Error/success message */}
@@ -1756,14 +1772,20 @@ export default function ArchivePageClient() {
                             {isUploading ? 'Uploading...' : 'Upload PDF'}
                         </button>
 
-                        <button
-                            onClick={() => setShowNewFolderModal(true)}
-                            className="bg-green-500 text-white px-4 py-2 rounded flex items-center"
-                            disabled={isLoading}
-                        >
-                            <MdAdd className="mr-2" /> New Folder
-                        </button>
+                        {
+                            (currentFolderInfo.ownerUID == currentUserInfo.uid || currentFolderInfo.ownerUID == '') && (
+                                <button
+                                    onClick={() => setShowNewFolderModal(true)}
+                                    className="bg-green-500 text-white px-4 py-2 rounded flex items-center"
+                                    disabled={isLoading}
+                                >
+                                    <MdAdd className="mr-2" /> New Folder
+                                </button>
+                            )
+                        }
+
                     </div>
+
 
                     <input
                         type="file"
@@ -1773,6 +1795,13 @@ export default function ArchivePageClient() {
                         onChange={handleFileChange}
                     />
                 </div>
+                {
+                    currentFolderInfo.ownerUID !== currentUserInfo.uid && currentFolderInfo.ownerUID != '' && (
+                        <div className='text-xs bg-gray-100 p-2 rounded mb-2'>
+                            Anda tidak memiliki akses pada folder ini, hanya dapat mengupload folder
+                        </div>
+                    )
+                }
 
                 {isLoading ? (
                     <div className="flex justify-center items-center py-12">
@@ -1798,38 +1827,38 @@ export default function ArchivePageClient() {
                                             <div className="text-center text-sm truncate w-full" title={folder.Pathname}>
                                                 {folder.Pathname}
                                             </div>
-                                                            {selectedItem === (folder.uid || folder.UID) && (
-                                                                <div className="flex mt-2 space-x-2">
-                                                                    {isFolderOwnedByCurrentUser(folder) ? (
-                                                                        <>
-                                                                            <button
-                                                                                className="text-green-500 hover:text-green-700 p-1"
-                                                                                onClick={(e) => handleEditClick(folder, 'folder', e)}
-                                                                            >
-                                                                                <MdEdit size={16} />
-                                                                            </button>
-                                                                            <button
-                                                                                className="text-red-500 hover:text-red-700 p-1"
-                                                                                onClick={(e) => handleDeleteClick(folder, 'folder', e)}
-                                                                            >
-                                                                                <MdDelete size={16} />
-                                                                            </button>
-                                                                        </>
-                                                                    ) : (
-                                                                        <button
-                                                                            className="text-blue-500 hover:text-blue-700 p-1 flex items-center space-x-1"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                navigateToFolder(folder);
-                                                                            }}
-                                                                            title="Lihat detail folder"
-                                                                        >
-                                                                            <MdFolderOpen size={16} />
-                                                                            <span className="text-xs">Detail</span>
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            )}
+                                            {selectedItem === (folder.uid || folder.UID) && (
+                                                <div className="flex mt-2 space-x-2">
+                                                    {isFolderOwnedByCurrentUser(folder) ? (
+                                                        <>
+                                                            <button
+                                                                className="text-green-500 hover:text-green-700 p-1"
+                                                                onClick={(e) => handleEditClick(folder, 'folder', e)}
+                                                            >
+                                                                <MdEdit size={16} />
+                                                            </button>
+                                                            <button
+                                                                className="text-red-500 hover:text-red-700 p-1"
+                                                                onClick={(e) => handleDeleteClick(folder, 'folder', e)}
+                                                            >
+                                                                <MdDelete size={16} />
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button
+                                                            className="text-blue-500 hover:text-blue-700 p-1 flex items-center space-x-1"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                navigateToFolder(folder);
+                                                            }}
+                                                            title="Lihat detail folder"
+                                                        >
+                                                            <MdFolderOpen size={16} />
+                                                            <span className="text-xs">Detail</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -1951,7 +1980,7 @@ export default function ArchivePageClient() {
                 )}
             </div>
 
-            
+
         </div>
     );
 }
