@@ -193,7 +193,7 @@ export default function Layout({ children }) {
                                     />
                                 </li>
                             )}
-                            <li>
+                            {/* <li>
                                 <Link href="/admin/tools" onClick={() => isMobile && setSidebarOpen(false)}>
                                     <div className="flex items-center py-3 pl-4 md:pl-6 hover:bg-gray-50">
                                         <MdBuild className="text-gray-400" />
@@ -202,7 +202,7 @@ export default function Layout({ children }) {
                                         </div>
                                     </div>
                                 </Link>
-                            </li>
+                            </li> */}
                             <li>
                                 <Link href="/admin/account" onClick={() => isMobile && setSidebarOpen(false)}>
                                     <div className="flex items-center py-3 pl-4 md:pl-6 hover:bg-gray-50">
