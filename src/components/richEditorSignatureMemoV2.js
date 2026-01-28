@@ -3,12 +3,6 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from "react";
 import "devextreme/dist/css/dx.light.css";
 import "devexpress-richedit/dist/dx.richedit.css";
-import {
-    create,
-    createOptions,
-    ViewType,
-    RichEditUnit,
-} from "devexpress-richedit";
 import { message, Spin } from "antd";
 import QRCodeStyling from "qr-code-styling";
 
@@ -82,79 +76,80 @@ const RichEditorSignatureMemoV2 = forwardRef(({
     }, [onSaveComplete])
 
     useEffect(() => {
-        if (typeof window !== "undefined") {
+        if (typeof window !== "undefined" && isOpen) {
             setIsLoading(true)
 
-            const options = createOptions();
-            options.bookmarks.color = "#ff0000";
-            options.confirmOnLosingChanges.enabled = false;
-            options.fields.updateFieldsBeforePrint = true;
-            options.fields.updateFieldsOnPaste = true;
-            options.mailMerge.activeRecord = 2;
-            options.mailMerge.viewMergedData = true;
-            options.bookmarks.visibility = true;
+            (async () => {
+                const richEditModule = await import("devexpress-richedit");
+                const { create, createOptions, ViewType, RichEditUnit } = richEditModule;
 
-            options.unit = RichEditUnit.Inch;
-            options.view.viewType = ViewType.PrintLayout;
-            options.view.simpleViewSettings.paddings = {
-                left: 15,
-                top: 15,
-                right: 15,
-                bottom: 15,
-            };
-            options.exportUrl = "https://siteurl.com/api/";
-            options.exportFormats = ["pdf"];
+                const options = createOptions();
+                options.bookmarks.color = "#ff0000";
+                options.confirmOnLosingChanges.enabled = false;
+                options.fields.updateFieldsBeforePrint = true;
+                options.fields.updateFieldsOnPaste = true;
+                options.mailMerge.activeRecord = 2;
+                options.mailMerge.viewMergedData = true;
+                options.bookmarks.visibility = true;
 
-            options.downloadPdfEnabled = true; // Enable only PDF downloads
-            options.downloadDocxEnabled = false; // Disable DOCX downloads
-            options.downloadRtfEnabled = false; // Disable RTF downloads
+                options.unit = RichEditUnit.Inch;
+                options.view.viewType = ViewType.PrintLayout;
+                options.view.simpleViewSettings.paddings = {
+                    left: 15,
+                    top: 15,
+                    right: 15,
+                    bottom: 15,
+                };
 
-            options.readOnly = false;
-            options.width = "100%";
-            options.height = "600px";
+                options.downloadPdfEnabled = true;
+                options.downloadDocxEnabled = false;
+                options.downloadRtfEnabled = false;
 
-            const richEditor = create(document.getElementById("richEditSignatureMemo"), options);
-            richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
+                options.readOnly = false;
+                options.width = "100%";
+                options.height = "600px";
 
-            richEditor.events.documentLoaded.addHandler(function (s, e) {
-                richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
-                const today = new Date();
-                const day = String(today.getDate()).padStart(2, '0');
-                const monthIndex = today.getMonth();
-                const year = today.getFullYear();
+                const richEditor = create(document.getElementById("richEditSignatureMemo"), options);
+                richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
 
-                const monthNamesIndonesian = [
-                    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-                    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-                ];
+                richEditor.events.documentLoaded.addHandler(function () {
+                    richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
+                    const today = new Date();
+                    const day = String(today.getDate()).padStart(2, '0');
+                    const monthIndex = today.getMonth();
+                    const year = today.getFullYear();
 
-                const month = monthNamesIndonesian[monthIndex];
-                const formattedDate = `${day} ${month} ${year}`;
+                    const monthNamesIndonesian = [
+                        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+                    ];
 
+                    const month = monthNamesIndonesian[monthIndex];
+                    const formattedDate = `${day} ${month} ${year}`;
 
+                    const fetchQr = async () => {
+                        const qrCode = await generateQR(getMessageNumberDocument());
+                        return qrCode;
+                    }
 
-                const fetchQr = async () => {
-                    const qrCode = await generateQR(getMessageNumberDocument());
-                    return qrCode;
-                }
+                    fetchQr().then((qrCode) => {
+                        richEditor._native.core.searchManager.replaceAll("[TGL_SURAT]", formattedDate, true)
+                        richEditor._native.core.searchManager.findAll("[TTD]", true)
 
-                fetchQr().then((qrCode) => {
-                    richEditor._native.core.searchManager.replaceAll("[TGL_SURAT]", formattedDate, true)
-                    richEditor._native.core.searchManager.findAll("[TTD]", true)
+                        const listOfSignatureIndex = richEditor._native.core.searchManager.foundIntervals
+                        const subDocument = richEditor.selection.activeSubDocument;
 
-                    const listOfSignatureIndex = richEditor._native.core.searchManager.foundIntervals
-                    const subDocument = richEditor.selection.activeSubDocument;
-
-                    listOfSignatureIndex.map((record) => {
-                        subDocument.insertPicture(record.start, qrCode);
+                        listOfSignatureIndex.map((record) => {
+                            subDocument.insertPicture(record.start, qrCode);
+                        })
+                        richEditor._native.core.searchManager.replaceAll("[TTD]", "", true)
                     })
-                    richEditor._native.core.searchManager.replaceAll("[TTD]", "", true)
+
                 })
 
-            })
-
-            richEditRef.current = richEditor;
-            setIsLoading(false)
+                richEditRef.current = richEditor;
+                setIsLoading(false)
+            })();
         }
 
         return () => {
@@ -163,7 +158,7 @@ const RichEditorSignatureMemoV2 = forwardRef(({
                 richEditRef.current = null;
             }
         };
-    }, [isOpen]);
+    }, [isOpen, getCurrentDocument, getMessageNumberDocument]);
 
 
     return (

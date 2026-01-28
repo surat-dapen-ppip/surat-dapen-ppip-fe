@@ -1,33 +1,30 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import { Form, message, Select, Spin, Upload, Row, Col, Button } from 'antd';
-import { Suspense, useEffect, useState } from 'react';
+import { Form, message, Select, Spin, Row, Col, Button } from 'antd';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
-import dynamic from 'next/dynamic';
-import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetCurrentDateInISOFormat, GetPositionName } from '@/utils/utility';
-import { getMessageByUid, updateMessage } from '@/services/message';
+import { GetPositionName } from '@/utils/utility';
+import { getMessageByUid } from '@/services/message';
 import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import moment from 'moment';
 import { getMediaByUid } from '@/services/media';
 import { MdDownload, MdInsertDriveFile } from 'react-icons/md';
+import RichEditorReadOnlyV2 from '@/components/richEditorReadOnlyV2';
 
-const RichEditReadOnlyComponent = dynamic(() => import('@/components/richEditReadOnly'), { ssr: false });
 
-
-export default function pageDraft() {
+export default function pageView() {
     const router = useRouter()
-    const [UID, setUID] = useState("");
+
     const [dataMessage, setDataMessage] = useState()
     const [isLoadingData, setIsLoadingData] = useState(true)
-
-    const { role, recipientUID, name, fetchCount } = useLayoutContext();
     const [FormMessage] = Form.useForm()
+
+    const editorRefView = useRef(null)
 
 
     const fetchMessage = async (uid) => {
@@ -45,10 +42,7 @@ export default function pageDraft() {
         }
     }
 
-    const [triggerSave, setTriggerSave] = useState(false)
-    const [triggerReset, setTriggerReset] = useState(false)
     const [currentDocument, setCurrentDocument] = useState("")
-    const [messageStatus, setMessageStatus] = useState(0)
 
     const [optionType, setOptionType] = useState([])
     const [optionTemplate, setOptionTemplate] = useState([])
@@ -78,14 +72,6 @@ export default function pageDraft() {
         return []
     }
 
-    const fetchTemplate = async (uid) => {
-        const response = await getTemplateSuratByUid(uid)
-        if (response) {
-            setTimeout(() => {
-                setCurrentDocument(response.data.Content)
-            }, 200)
-        }
-    }
 
     const [optionNature, setOptionNature] = useState([])
     const [optionPriority, setOptionPriority] = useState([])
@@ -118,125 +104,7 @@ export default function pageDraft() {
         }
     }
 
-    const handleOnSaveComplete = async () => {
-        setLoadingSubmit(true); // Start loading spinner
-        let data = FormMessage.getFieldsValue()
-        let date = GetCurrentDateInISOFormat()
-
-        data.Date = date
-        data.MessageContent = currentDocument
-
-        let listRecipient = []
-        let listRecipientUID = []
-
-        let listCC = []
-        let listCCUID = []
-
-        data.MessageClassification = 1
-        data.MessageStatus = messageStatus
-        data.TemplateUID = data.TemplateObject.label
-
-        data.Drafter = name
-        data.DrafterUID = recipientUID
-
-        data.Approver = data.ApproverObject.label
-        data.ApproverUID = data.ApproverObject.value
-
-        data.Reviewer = data.ReviewerObject.label
-        data.ReviewerUID = data.ReviewerObject.value
-
-        data.RecipientObject.forEach(item => {
-            listRecipient.push(item.label)
-            listRecipientUID.push(item.value)
-        });
-        data.Recipient = listRecipient.join(',');
-        data.RecipientUID = listRecipientUID.join(',');
-
-        data.CCObject?.forEach(item => {
-            listCC.push(item.label)
-            listCCUID.push(item.value)
-        });
-        data.CC = listCC.join(',');
-        data.CCUID = listCCUID.join(',');
-
-        try {
-            const media = await handleUploadFile()
-            let mediaUID = ""
-            if (media != null) {
-                mediaUID = media.data.UID
-            }
-
-            await updateMessage(UID, data)
-            setFileList([])
-
-            fetchCount(role, recipientUID, 0)
-
-            FormMessage.resetFields()
-            message.success("Proses Berhasil")
-            router.push("/admin/daftarSurat")
-        } catch (error) {
-            message.error("Proses Gagal")
-        } finally {
-            setLoadingSubmit(false); // Stop loading spinner
-        }
-        setTriggerSave(false);
-    }
-
     const [loadingSubmit, setLoadingSubmit] = useState(false);
-    const [fileList, setFileList] = useState([]);
-
-    const handleUploadFile = async () => {
-        if (fileList.length === 0) {
-            setLoadingSubmit(false)
-            return null
-        }
-
-        // Create a FormData object to hold the file
-        const formData = new FormData();
-        formData.append('file', fileList[0].originFileObj); // The file to upload
-
-        try {
-            // Make a POST request to your Go backend
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
-
-            // Success response
-            message.success('Attachment uploaded successfully');
-            return response.data
-        } catch (error) {
-            message.error('Failed to upload Attachment');
-            throw error;
-        }
-    };
-
-
-    // Handle file selection and validation
-    const handleChangeFile = ({ fileList }) => {
-        const file = fileList[0]?.originFileObj;
-        if (file) {
-            setFileList(fileList.slice(-1)); // Only keep the last file (single file upload)
-        }
-    };
-
-    // Validate file type and size before uploading
-    const beforeUpload = (file) => {
-        const isPdf = file.type === 'application/pdf';
-        if (!isPdf) {
-            message.error('Hanya dapat mengupload file PDF');
-            return Upload.LIST_IGNORE; // Ignore non-PDF files
-        }
-        const isSizeValid = file.size / 1024 / 1024 < 10; // Size check in MB
-        if (!isSizeValid) {
-            message.error('Ukuran file maksimal adalah 10MB');
-            return Upload.LIST_IGNORE; // Ignore files larger than 10MB
-        }
-        return isPdf && isSizeValid;
-    };
-
-    const handleFinishSubmission = async () => {}
 
     const [dataUser, setDataUser] = useState([])
     const fetchUser = async () => {
@@ -251,28 +119,30 @@ export default function pageDraft() {
     const [downloadingStates, setDownloadingStates] = useState({})
 
     const handleDownload = async (mediaUID, fileName) => {
-        try {
-            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
-            
-            const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
-                responseType: 'blob',
-            });
-            
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', fileName);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            
-            message.success(`File ${fileName} berhasil didownload`);
-        } catch (error) {
-            console.error('Error downloading file:', error);
-            message.error(`Gagal mendownload file ${fileName}`);
-        } finally {
-            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
+        if (typeof window !== 'undefined') {
+            try {
+                setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+
+                const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                    responseType: 'blob',
+                });
+
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', fileName);
+                document.body.appendChild(link);
+                link.click();
+                link.parentNode.removeChild(link);
+                window.URL.revokeObjectURL(url);
+
+                message.success(`File ${fileName} berhasil didownload`);
+            } catch (error) {
+                console.error('Error downloading file:', error);
+                message.error(`Gagal mendownload file ${fileName}`);
+            } finally {
+                setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
+            }
         }
     };
 
@@ -283,10 +153,7 @@ export default function pageDraft() {
         }
 
         try {
-            // Split UIDs by comma
             const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
-            
-            // Fetch all media details
             const mediaPromises = mediaUIDs.map(async (uid) => {
                 try {
                     const response = await getMediaByUid(uid.trim());
@@ -316,6 +183,9 @@ export default function pageDraft() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dataMessage]);
 
+    const getCurrentDocument = () => {
+        return currentDocument
+    }
 
     useEffect(() => {
         fetchTypeName()
@@ -325,12 +195,10 @@ export default function pageDraft() {
 
 
         if (typeof window !== 'undefined') {
-            // Access query parameters from the URL
             const urlParams = new URLSearchParams(window.location.search);
             const uid = urlParams.get('uid');
 
             if (!uid) {
-                // No UID provided, redirect to daftarSurat
                 message.info('Surat tidak ditemukan')
                 router.push("/admin/daftarSurat")
                 return
@@ -342,11 +210,11 @@ export default function pageDraft() {
                     const data = await fetchMessage(uid)
 
                     if (!data) {
-                        // Data not found, redirect to daftarSurat
                         message.info('Data surat tidak ditemukan')
                         router.push("/admin/daftarSurat")
                         return
                     }
+                    setCurrentDocument(data.MessageContent)
 
                     FormMessage.setFieldValue('TypeUID', data.TypeUID)
                     FormMessage.setFieldValue('Title', data.Title)
@@ -358,13 +226,12 @@ export default function pageDraft() {
                     if (data.MessageClassification == 1) {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
                         FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
-                    }else{
+                    } else {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                         FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
                     }
 
                     const responseUser = await getUsers()
-
                     const optionUser = responseUser.data?.map((record) => {
                         return {
                             value: record.UID,
@@ -373,8 +240,7 @@ export default function pageDraft() {
                     })
 
                     const optionTemplateName = await fetchTemplateName(data.TypeUID, data.MessageClassification)
-
-                    const selectedReviewer = data.ReviewerUID?.split(",").map(uid => 
+                    const selectedReviewer = data.ReviewerUID?.split(",").map(uid =>
                         optionUser.find(option => option.value === uid)
                     )
                     const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
@@ -388,15 +254,9 @@ export default function pageDraft() {
                     FormMessage.setFieldValue('RecipientObject', selectedRecipient)
                     FormMessage.setFieldValue('TemplateObject', selectedTemplate)
 
-                    setTimeout(() => {
-                        setCurrentDocument(data.MessageContent)
-                    }, 300)
-
                     fetchTemplateName(data.TypeUID)
-                    
                     setIsLoadingData(false)
                 } catch (error) {
-                    console.error("Error loading message:", error)
                     message.info('Gagal memuat data surat')
                     setIsLoadingData(false)
                     router.push("/admin/daftarSurat")
@@ -404,7 +264,6 @@ export default function pageDraft() {
             }
 
             handleMessage()
-            setUID(uid)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -433,13 +292,12 @@ export default function pageDraft() {
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
                     <h2 className="text-md font-semibold mb-5 text-gray-700">Detail Surat</h2>
                     <hr className="mb-8 bg-gray-300"></hr>
-                                            <Form
-                            layout='horizontal'
-                            labelCol={{ span: 5 }}
-                            colon={false}
-                            form={FormMessage}
-                            onFinish={handleFinishSubmission}
-                        >
+                    <Form
+                        layout='horizontal'
+                        labelCol={{ span: 5 }}
+                        colon={false}
+                        form={FormMessage}
+                    >
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
                                 <Form.Item
@@ -501,9 +359,6 @@ export default function pageDraft() {
                                         labelInValue
                                         options={optionTemplate}
                                         className="mb-3 w-full single"
-                                        onSelect={(option) => {
-                                            fetchTemplate(option.value)
-                                        }}
                                         disabled
                                     />
                                 </Form.Item>
@@ -676,7 +531,7 @@ export default function pageDraft() {
                             <Col xs={24} md={12}></Col>
                         </Row>
                     </Form>
-                    
+
                     {/* Lampiran Section */}
                     <Row gutter={[24, 16]} className="mt-5">
                         <Col xs={24} md={12}>
@@ -685,8 +540,8 @@ export default function pageDraft() {
                                 {mediaList.length > 0 ? (
                                     <div className="space-y-2">
                                         {mediaList.map((media, index) => (
-                                            <div 
-                                                key={media.UID} 
+                                            <div
+                                                key={media.UID}
                                                 className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
                                             >
                                                 <div className="flex items-center space-x-3 flex-1">
@@ -727,12 +582,10 @@ export default function pageDraft() {
 
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
                     <Suspense fallback={<div>Loading...</div>}>
-                        <RichEditReadOnlyComponent
-                            currentDocument={currentDocument}
-                            setCurrentDocument={setCurrentDocument}
-                            onSaveComplete={handleOnSaveComplete}
-                            triggerSave={triggerSave}
-                            triggerReset={triggerReset}
+                        <RichEditorReadOnlyV2
+                            ref={editorRefView}
+                            getCurrentDocument={getCurrentDocument}
+                            isOpen={true}
                         />
                     </Suspense>
                 </div>

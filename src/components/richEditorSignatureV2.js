@@ -3,19 +3,12 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from "react";
 import "devextreme/dist/css/dx.light.css";
 import "devexpress-richedit/dist/dx.richedit.css";
-import {
-    create,
-    createOptions,
-    ViewType,
-    RichEditUnit,
-} from "devexpress-richedit";
 import { message, Spin } from "antd";
 import QRCodeStyling from "qr-code-styling";
 
 
 const RichEditorSignatureV2 = forwardRef(({
     getCurrentDocument,
-    getSignatureDocument,
     getMessageNumberDocument,
     onSaveComplete,
     isOpen,
@@ -85,75 +78,79 @@ const RichEditorSignatureV2 = forwardRef(({
     useEffect(() => {
         if (typeof window !== "undefined" && isOpen) {
             setIsLoading(true);
-            const options = createOptions();
-            options.bookmarks.color = "#ff0000";
-            options.confirmOnLosingChanges.enabled = false;
-            options.fields.updateFieldsBeforePrint = true;
-            options.fields.updateFieldsOnPaste = true;
-            options.mailMerge.activeRecord = 2;
-            options.mailMerge.viewMergedData = true;
-            options.bookmarks.visibility = true;
 
-            options.unit = RichEditUnit.Inch;
-            options.view.viewType = ViewType.PrintLayout;
-            options.view.simpleViewSettings.paddings = {
-                left: 15,
-                top: 15,
-                right: 15,
-                bottom: 15,
-            };
-            options.exportUrl = "https://siteurl.com/api/";
-            options.exportFormats = ["pdf"];
+            (async () => {
+                const richEditModule = await import("devexpress-richedit");
+                const { create, createOptions, ViewType, RichEditUnit } = richEditModule;
 
-            options.downloadPdfEnabled = true; // Enable only PDF downloads
-            options.downloadDocxEnabled = false; // Disable DOCX downloads
-            options.downloadRtfEnabled = false; // Disable RTF downloads
+                const options = createOptions();
+                options.bookmarks.color = "#ff0000";
+                options.confirmOnLosingChanges.enabled = false;
+                options.fields.updateFieldsBeforePrint = true;
+                options.fields.updateFieldsOnPaste = true;
+                options.mailMerge.activeRecord = 2;
+                options.mailMerge.viewMergedData = true;
+                options.bookmarks.visibility = true;
 
-            options.readOnly = false;
-            options.width = "100%";
-            options.height = "600px";
+                options.unit = RichEditUnit.Inch;
+                options.view.viewType = ViewType.PrintLayout;
+                options.view.simpleViewSettings.paddings = {
+                    left: 15,
+                    top: 15,
+                    right: 15,
+                    bottom: 15,
+                };
+                options.exportUrl = "https://siteurl.com/api/";
+                options.exportFormats = ["pdf"];
 
-            const richEditor = create(document.getElementById("richEditSignature"), options);
-            richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
+                options.downloadPdfEnabled = true;
+                options.downloadDocxEnabled = false;
+                options.downloadRtfEnabled = false;
 
-            richEditor.events.documentLoaded.addHandler(function (s, e) {
-                richEditor.document.images.createFloating(0, {
-                    base64: generateQR(getMessageNumberDocument()),
-                    actualSize: {
-                        width: 1500,
-                        height: 1500
-                    },
-                    horizontalPosition: {
-                        relativeTo: 5,
-                        position: -1000,
-                    },
-                    verticalPosition: {
-                        relativeTo: 5,
-                        position: -2000,
-                    },
-                    wrapSide: 1,
-                    wrapType: 5
-                })
+                options.readOnly = false;
+                options.width = "100%";
+                options.height = "600px";
 
-                // change no surat
-                richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
+                const richEditor = create(document.getElementById("richEditSignature"), options);
+                richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
 
-                const today = new Date();
-                const day = String(today.getDate()).padStart(2, '0');
-                const monthIndex = today.getMonth();
-                const year = today.getFullYear();
-                const monthNamesIndonesian = [
-                    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-                    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-                ];
-                const month = monthNamesIndonesian[monthIndex];
-                const formattedDate = `${day} ${month} ${year}`;
-                richEditor._native.core.searchManager.replaceAll("[TGL_SURAT]", formattedDate, true)
-            });
+                richEditor.events.documentLoaded.addHandler(function () {
+                    richEditor.document.images.createFloating(0, {
+                        base64: generateQR(getMessageNumberDocument()),
+                        actualSize: {
+                            width: 1500,
+                            height: 1500
+                        },
+                        horizontalPosition: {
+                            relativeTo: 5,
+                            position: -1000,
+                        },
+                        verticalPosition: {
+                            relativeTo: 5,
+                            position: -2000,
+                        },
+                        wrapSide: 1,
+                        wrapType: 5
+                    })
 
+                    richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
 
-            richEditRef.current = richEditor;
-            setIsLoading(false);
+                    const today = new Date();
+                    const day = String(today.getDate()).padStart(2, '0');
+                    const monthIndex = today.getMonth();
+                    const year = today.getFullYear();
+                    const monthNamesIndonesian = [
+                        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+                    ];
+                    const month = monthNamesIndonesian[monthIndex];
+                    const formattedDate = `${day} ${month} ${year}`;
+                    richEditor._native.core.searchManager.replaceAll("[TGL_SURAT]", formattedDate, true)
+                });
+
+                richEditRef.current = richEditor;
+                setIsLoading(false);
+            })();
         }
 
         return () => {
@@ -163,7 +160,7 @@ const RichEditorSignatureV2 = forwardRef(({
             }
         };
 
-    }, [isOpen]);
+    }, [isOpen, getCurrentDocument, getMessageNumberDocument]);
 
 
     return (

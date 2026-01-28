@@ -4,12 +4,11 @@
 import { Button, Form, Input, message, Modal, Select, Spin, Row, Col } from 'antd';
 import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner } from 'react-icons/md';
 import { Suspense, useEffect, useState, useRef } from 'react';
-import { getTemplateCodeByUid, getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
+import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
-import dynamic from 'next/dynamic';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetCurrentDateInISOFormat, GetCurrentMonthInRoman, GetPositionName, ZeroPad } from '@/utils/utility';
+import { GetCurrentDateInISOFormat, GetPositionName, ZeroPad } from '@/utils/utility';
 import { approveMessage, getMessageByUid } from '@/services/message';
 import { getUserByUid, getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -17,18 +16,15 @@ import axios from 'axios';
 import moment from 'moment';
 import { createMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
-
 import { createMessageRejection } from '@/services/messageRejection';
 import { debounce } from 'lodash';
-
-const RichEditorSignatureMemoV2 = dynamic(() => import('@/components/richEditorSignatureMemoV2'), { ssr: false });
-const RichEditorReviewV2 = dynamic(() => import('@/components/richEditorReviewV2'), { ssr: false });
-const RichEditorSignatureV2 = dynamic(() => import('@/components/richEditorSignatureV2'), { ssr: false });
+import RichEditorSignatureMemoV2 from '@/components/richEditorSignatureMemoV2';
+import RichEditorReviewV2 from '@/components/richEditorReviewV2';
+import RichEditorSignatureV2 from '@/components/richEditorSignatureV2';
 
 export default function pageReview() {
     const router = useRouter()
     const [UID, setUID] = useState("");
-    const [dataMessage, setDataMessage] = useState()
 
     const [loadingSubmit, setLoadingSubmit] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true)
@@ -50,11 +46,12 @@ export default function pageReview() {
     const [isModalRejectOpen, setIsModalRejectOpen] = useState(false)
 
     const handleBack = () => { setIsModalBackOpen(true) }
-    const handleApprove = () => {
+    const handleApprove = async () => {
         if (loadingSubmit) {
             return
         }
         setLoadingSubmit(true);
+        triggerEditorReviewUpdate();
         setTimeout(() => {
             if (messageClassification == 1) {
                 setIsModalApproveSuratKeluarOpen(true)
@@ -65,8 +62,8 @@ export default function pageReview() {
         }, 5000)
 
     }
-    const handleRevision = () => {setIsModalRevisionOpen(true)}
-    const handleReject = () => {setIsModalRejectOpen(true)}
+    const handleRevision = () => { setIsModalRevisionOpen(true) }
+    const handleReject = () => { setIsModalRejectOpen(true) }
     const handleCancelRevision = () => { setIsModalRevisionOpen(false) }
     const handleCancelReject = () => { setIsModalRejectOpen(false) }
     const handleCancelBack = () => { setIsModalBackOpen(false) }
@@ -104,8 +101,7 @@ export default function pageReview() {
         try {
             const response = await getMessageByUid(uid)
             if (response && response.data) {
-                setDataMessage(response.data)
-                if(response.data?.ListMedia){
+                if (response.data?.ListMedia) {
                     fetchMediaList(response.data?.ListMedia)
                 }
                 return response.data
@@ -142,15 +138,6 @@ export default function pageReview() {
             })
         }
         return []
-    }
-
-    const fetchTemplate = async (uid) => {
-        const response = await getTemplateSuratByUid(uid)
-        if (response) {
-            setTimeout(() => {
-                setCurrentDocument(response.data.Content)
-            }, 200)
-        }
     }
 
     const [optionNature, setOptionNature] = useState([])
@@ -234,6 +221,14 @@ export default function pageReview() {
         }
     }
 
+    const handleOnUpdateDocument = (content) => {
+        try {
+            setCurrentDocument(content)
+        } catch (error) {
+            message.error("Proses Gagal")
+        }
+    }
+
     const handleFinishRejection = debounce(async () => {
         try {
             setLoadingSubmit(true);
@@ -308,28 +303,30 @@ export default function pageReview() {
     const [downloadingStates, setDownloadingStates] = useState({})
 
     const handleDownload = async (mediaUID, fileName) => {
-        try {
-            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+        if (typeof window !== 'undefined') {
+            try {
+                setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
 
-            const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
-                responseType: 'blob',
-            });
+                const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                    responseType: 'blob',
+                });
 
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', fileName);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode.removeChild(link);
-            window.URL.revokeObjectURL(url);
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', fileName);
+                document.body.appendChild(link);
+                link.click();
+                link.parentNode.removeChild(link);
+                window.URL.revokeObjectURL(url);
 
-            message.success(`File ${fileName} berhasil didownload`);
-        } catch (error) {
-            console.error('Error downloading file:', error);
-            message.error(`Gagal mendownload file ${fileName}`);
-        } finally {
-            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
+                message.success(`File ${fileName} berhasil didownload`);
+            } catch (error) {
+                console.error('Error downloading file:', error);
+                message.error(`Gagal mendownload file ${fileName}`);
+            } finally {
+                setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
+            }
         }
     };
 
@@ -373,7 +370,7 @@ export default function pageReview() {
         }
         return ""
     }
-    
+
 
     useEffect(() => {
         fetchTypeName()
@@ -381,30 +378,29 @@ export default function pageReview() {
         fetchPriority()
         fetchUser()
 
-
         if (typeof window !== 'undefined') {
             const urlParams = new URLSearchParams(window.location.search);
             const uid = urlParams.get('uid');
 
             if (!uid) {
-                // No UID provided, redirect to daftarSurat
                 message.info('Surat tidak ditemukan')
                 router.push("/admin/daftarSurat")
                 return
             }
 
-            const handleMessage = async () => {
+            const handleMessage = async (uid) => {
                 try {
                     setIsLoadingData(true)
                     const data = await fetchMessage(uid)
 
                     if (!data) {
-                        // Data not found, redirect to daftarSurat
                         message.info('Data surat tidak ditemukan')
-                        router.push("/admin/daftarSurat")
+                        console.log(data)
+                        // router.push("/admin/daftarSurat")
                         return
                     }
 
+                    setCurrentDocument(data.MessageContent)
                     setCurrentMessageStatus(data.MessageStatus)
                     setMessageClassification(data.MessageClassification)
 
@@ -438,7 +434,6 @@ export default function pageReview() {
                     }
 
                     const responseUser = await getUsers()
-
                     const optionUser = responseUser.data?.map((record) => {
                         return {
                             value: record.UID,
@@ -462,19 +457,14 @@ export default function pageReview() {
                     FormMessage.setFieldValue('RecipientObject', selectedRecipient)
                     FormMessage.setFieldValue('TemplateObject', selectedTemplate)
 
-                    setTimeout(() => {
-                        setCurrentDocument(data.MessageContent)
-                    }, 300)
-
                     setIsLoadingData(false)
                 } catch (error) {
                     console.error("Error loading message:", error)
                     message.info('Gagal memuat data surat')
                     setIsLoadingData(false)
-                    // router.push("/admin/daftarSurat")
                 }
             }
-            handleMessage()
+            handleMessage(uid)
             setUID(uid)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -509,9 +499,9 @@ export default function pageReview() {
         }
     };
 
-    const triggerEditorReviewSave = () => {
+    const triggerEditorReviewUpdate = () => {
         if (editorRefReview.current) {
-            editorRefReview.current.triggerSaveReview();
+            editorRefReview.current.triggerUpdateReview();
         }
     };
 
@@ -652,9 +642,6 @@ export default function pageReview() {
                                 >
                                     <Select
                                         className="mb-3 w-full single"
-                                        onSelect={(value, _) => {
-                                            fetchTemplateName(value);
-                                        }}
                                         disabled
                                     />
                                 </Form.Item>
@@ -669,9 +656,6 @@ export default function pageReview() {
                                     <Select
                                         labelInValue
                                         className="mb-3 w-full single"
-                                        onSelect={(option) => {
-                                            fetchTemplate(option.value)
-                                        }}
                                         disabled
                                     />
                                 </Form.Item>
@@ -893,9 +877,11 @@ export default function pageReview() {
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
                     <Suspense fallback={<div>Loading...</div>}>
                         <RichEditorReviewV2
+                            ref={editorRefReview}
                             getCurrentDocument={getCurrentDocument}
                             getMessageClassification={getMessageClassification}
                             onSaveComplete={handleOnReviewerSaveComplete}
+                            onUpdateDocument={handleOnUpdateDocument}
                             isOpen={true}
                         />
                     </Suspense>
@@ -983,6 +969,7 @@ export default function pageReview() {
                             (
                                 <Suspense fallback={<div>Loading...</div>}>
                                     <RichEditorSignatureMemoV2
+                                        ref={editorRefMemo}
                                         getCurrentDocument={getCurrentDocument}
                                         getMessageNumberDocument={getMessageNumberDocument}
                                         onSaveComplete={handleOnSaveComplete}

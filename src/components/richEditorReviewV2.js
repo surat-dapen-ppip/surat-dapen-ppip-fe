@@ -3,12 +3,6 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from "react";
 import "devextreme/dist/css/dx.light.css";
 import "devexpress-richedit/dist/dx.richedit.css";
-import {
-    create,
-    createOptions,
-    ViewType,
-    RichEditUnit,
-} from "devexpress-richedit";
 import { message, Spin } from "antd";
 
 
@@ -16,6 +10,7 @@ const RichEditorReviewV2 = forwardRef(({
     getCurrentDocument,
     getMessageClassification,
     onSaveComplete,
+    onUpdateDocument,
     isOpen,
 }, ref) => {
 
@@ -23,7 +18,8 @@ const RichEditorReviewV2 = forwardRef(({
     const richEditRef = useRef(null);
 
     useImperativeHandle(ref, () => ({
-        triggerSaveReview: handleSave
+        triggerSaveReview: handleSave,
+        triggerUpdateReview: handleUpdate
     }));
 
     function isEmptyOrWhitespace(textMessage) {
@@ -71,42 +67,65 @@ const RichEditorReviewV2 = forwardRef(({
         }
     }, [onSaveComplete])
 
+    const handleUpdate = useCallback(() => {
+        alert('updated here')
+        try {
+            const textMessage = richEditRef.current.document.getText();
+            if (isEmptyOrWhitespace(textMessage)) {
+                message.error("Template is empty or only whitespace characters")
+            }
+
+            if (isTagRequired(textMessage, getMessageClassification())) {
+                richEditRef.current.exportToBase64(function (documentAsBase64) {
+                    onUpdateDocument(documentAsBase64)
+                });
+            } else {
+                getMessageError(getMessageClassification())
+            }
+        } catch (error) {
+            console.log(error)
+        }
+    }, [onUpdateDocument])
+
     useEffect(() => {
         if (typeof window !== "undefined" && isOpen) {
             setIsLoading(true);
-            const options = createOptions();
-            options.bookmarks.color = '#ff0000';
-            options.confirmOnLosingChanges.enabled = false;
-            options.fields.updateFieldsBeforePrint = true;
-            options.fields.updateFieldsOnPaste = true;
-            options.mailMerge.activeRecord = 2;
-            options.mailMerge.viewMergedData = true;
-            options.bookmarks.visibility = true;
 
-            options.unit = RichEditUnit.Inch;
-            options.view.viewType = ViewType.PrintLayout;
-            options.view.simpleViewSettings.paddings = {
-                left: 15,
-                top: 15,
-                right: 15,
-                bottom: 15,
-            };
-            options.exportUrl = 'https://siteurl.com/api/';
-            options.exportFormats = ['pdf'];
+            (async () => {
+                const richEditModule = await import("devexpress-richedit");
+                const { create, createOptions, ViewType, RichEditUnit } = richEditModule;
 
-            options.downloadPdfEnabled = true; // Enable only PDF downloads
-            options.downloadDocxEnabled = false; // Disable DOCX downloads
-            options.downloadRtfEnabled = false; // Disable RTF downloads
+                const options = createOptions();
+                options.bookmarks.color = '#ff0000';
+                options.confirmOnLosingChanges.enabled = false;
+                options.fields.updateFieldsBeforePrint = true;
+                options.fields.updateFieldsOnPaste = true;
+                options.mailMerge.activeRecord = 2;
+                options.mailMerge.viewMergedData = true;
+                options.bookmarks.visibility = true;
 
-            options.readOnly = false;
-            options.width = '100%';
-            options.height = '600px';
+                options.unit = RichEditUnit.Inch;
+                options.view.viewType = ViewType.PrintLayout;
+                options.view.simpleViewSettings.paddings = {
+                    left: 15,
+                    top: 15,
+                    right: 15,
+                    bottom: 15,
+                };
 
-            const richEditor = create(document.getElementById("richEditReview"), options);
-            richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
+                options.downloadPdfEnabled = true;
+                options.downloadDocxEnabled = false;
+                options.downloadRtfEnabled = false;
 
-            richEditRef.current = richEditor;
-            setIsLoading(false);
+                options.readOnly = false;
+                options.width = '100%';
+                options.height = '600px';
+
+                const richEditor = create(document.getElementById("richEditReview"), options);
+                richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
+                richEditRef.current = richEditor;
+                setIsLoading(false);
+            })();
         }
 
         return () => {
@@ -116,13 +135,13 @@ const RichEditorReviewV2 = forwardRef(({
             }
         };
 
-    }, [isOpen]);
+    }, [isOpen, getCurrentDocument]);
 
 
     return (
-        <Spin spinning={isLoading} tip="Sedang menggenerate signature, mohon tunggu...">
+        <Spin spinning={isLoading} tip="Sedang membuka dokumen mohon tunggu...">
             <div>
-                <div ref={richEditRef} id="richEditReview"></div>
+                <div id="richEditReview"></div>
             </div>
         </Spin>
     );
