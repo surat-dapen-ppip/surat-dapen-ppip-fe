@@ -111,7 +111,7 @@ export default function pageDetailSuratMasuk() {
 
                 const watermarkText = [
                     "",
-                    "Dana Pensiun PPIP",
+                    "Dana Pensiun PPIP - PUSRI",
                     "Downloaded by:",
                     username || '-',
                     "Downloaded at:",

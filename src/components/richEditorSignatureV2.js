@@ -68,7 +68,6 @@ const RichEditorSignatureV2 = forwardRef(({
 
             richEditRef.current.exportToBase64(function (documentAsBase64) {
                 onSaveComplete(documentAsBase64);
-                alert('Document berhasil disimpan')
             });
         } catch (error) {
             alert('Terdapat kesalahan saat menyimpan dokumen')
@@ -111,51 +110,55 @@ const RichEditorSignatureV2 = forwardRef(({
                 options.width = "100%";
                 options.height = "600px";
 
+                const fetchQr = async () => {
+                    const qrCode = await generateQR(getMessageNumberDocument());
+                    return qrCode;
+                }
+
                 const richEditor = create(document.getElementById("richEditSignature"), options);
-                richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
-
                 richEditor.events.documentLoaded.addHandler(function () {
-                    richEditor.document.images.createFloating(0, {
-                        base64: generateQR(getMessageNumberDocument()),
-                        actualSize: {
-                            width: 1500,
-                            height: 1500
-                        },
-                        horizontalPosition: {
-                            relativeTo: 5,
-                            position: -1000,
-                        },
-                        verticalPosition: {
-                            relativeTo: 5,
-                            position: -2000,
-                        },
-                        wrapSide: 1,
-                        wrapType: 5
+                    fetchQr().then((qrCode) => {
+                        richEditor.document.images.createFloating(0, {
+                            base64: qrCode,
+                            actualSize: {
+                                width: 1500,
+                                height: 1500
+                            },
+                            horizontalPosition: {
+                                relativeTo: 5,
+                                position: -1000,
+                            },
+                            verticalPosition: {
+                                relativeTo: 5,
+                                position: -2000,
+                            },
+                            wrapSide: 1,
+                            wrapType: 5
+                        })
+
+                        richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
+
+                        const today = new Date();
+                        const day = String(today.getDate()).padStart(2, '0');
+                        const monthIndex = today.getMonth();
+                        const year = today.getFullYear();
+                        const monthNamesIndonesian = [
+                            'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                            'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+                        ];
+                        const month = monthNamesIndonesian[monthIndex];
+                        const formattedDate = `${day} ${month} ${year}`;
+                        richEditor._native.core.searchManager.replaceAll("[TGL_SURAT]", formattedDate, true)
                     })
-
-                    richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
-
-                    const today = new Date();
-                    const day = String(today.getDate()).padStart(2, '0');
-                    const monthIndex = today.getMonth();
-                    const year = today.getFullYear();
-                    const monthNamesIndonesian = [
-                        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-                        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-                    ];
-                    const month = monthNamesIndonesian[monthIndex];
-                    const formattedDate = `${day} ${month} ${year}`;
-                    richEditor._native.core.searchManager.replaceAll("[TGL_SURAT]", formattedDate, true)
                 });
-
+                richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
                 richEditRef.current = richEditor;
                 setIsLoading(false);
             }
-
             init()
         }
 
-    }, [isOpen, getCurrentDocument, getMessageNumberDocument]);
+    }, [isOpen]);
 
 
     return (

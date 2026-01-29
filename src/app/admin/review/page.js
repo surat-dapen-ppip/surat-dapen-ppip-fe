@@ -224,7 +224,7 @@ export default function pageReview() {
     const handleOnUpdateDocument = (content) => {
         try {
             setCurrentDocument(content)
-            
+
         } catch (error) {
             message.error("Proses Gagal")
         }
@@ -276,14 +276,19 @@ export default function pageReview() {
             setLoadingSubmit(true)
             if (typeof window !== 'undefined') {
                 if (currentMessageStatus == 41) {
-                    editorRefMemo.current.triggerSaveMemo()
+                    triggerEditorReviewSave()
                 } else if (currentMessageStatus == 42) {
-                    editorRefSK.current.triggerSaveSK()
+                    if (messageClassification == 1) {
+                        triggerEditorSKSave()
+                    } else if (messageClassification == 2) {
+                        triggerEditorMemoSave()
+                    }
                 } else {
                     message.error('You are not allowed to perform this action')
                 }
             }
         } catch (error) {
+            console.log(error);
             message.error('Terjadi kesalahan saat memproses approval')
         } finally {
             setLoadingSubmit(false)
@@ -497,6 +502,12 @@ export default function pageReview() {
     const triggerEditorMemoSave = () => {
         if (editorRefMemo.current) {
             editorRefMemo.current.triggerSaveMemo();
+        }
+    };
+
+    const triggerEditorReviewSave = () => {
+        if (editorRefReview.current) {
+            editorRefReview.current.triggerSaveReview();
         }
     };
 

@@ -17,7 +17,7 @@ const RichEditorReadOnlyV2 = forwardRef(({
     useEffect(() => {
         if (typeof window !== 'undefined' && isOpen) {
             setIsLoading(true);
-            (async () => {
+            const init = async () => {
                 const richEditModule = await import("devexpress-richedit");
                 const { create, createOptions, ViewType, RichEditUnit } = richEditModule;
 
@@ -52,16 +52,10 @@ const RichEditorReadOnlyV2 = forwardRef(({
                 richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
                 richEditRef.current = richEditor;
                 setIsLoading(false);
-            })();
-        }
-
-        return () => {
-            if (richEditRef.current) {
-                richEditRef.current.dispose();
-                richEditRef.current = null;
             }
-        };
-    }, [isOpen, getCurrentDocument]);
+            init()
+        }
+    }, [isOpen]);
 
     return (
         <div>

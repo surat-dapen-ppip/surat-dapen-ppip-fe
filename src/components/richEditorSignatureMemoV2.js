@@ -68,7 +68,6 @@ const RichEditorSignatureMemoV2 = forwardRef(({
 
             richEditRef.current.exportToBase64(function (documentAsBase64) {
                 onSaveComplete(documentAsBase64);
-                alert('Document berhasil disimpan')
             });
         } catch (error) {
             alert('Terdapat kesalahan saat menyimpan dokumen')
@@ -110,8 +109,6 @@ const RichEditorSignatureMemoV2 = forwardRef(({
                 options.height = "600px";
 
                 const richEditor = create(document.getElementById("richEditSignatureMemo"), options);
-                richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
-
                 richEditor.events.documentLoaded.addHandler(function () {
                     richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
                     const today = new Date();
@@ -146,14 +143,14 @@ const RichEditorSignatureMemoV2 = forwardRef(({
                     })
 
                 })
-
+                richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);   
                 richEditRef.current = richEditor;
-                setIsLoading(false)
+                setIsLoading(false);
             }
 
             init();
         }
-    }, [isOpen, getCurrentDocument, getMessageNumberDocument]);
+    }, [isOpen]);
 
 
     return (
