@@ -193,7 +193,7 @@ export default function pageDetailSuratKeluar() {
 
                 const watermarkText = [
                     "",
-                    "Dana Pensiun PPIP",
+                    "Dana Pensiun PPIP - PUSRI",
                     "Downloaded by:",
                     username || '-',
                     "Downloaded at:",

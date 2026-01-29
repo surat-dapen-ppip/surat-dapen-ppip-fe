@@ -2,14 +2,13 @@
 "use client"
 
 import { Button, Form, Input, message, Modal, Select, Spin, Row, Col } from 'antd';
-import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner} from 'react-icons/md';
-import { Suspense, useEffect, useState } from 'react';
-import { getTemplateCodeByUid, getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
+import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner } from 'react-icons/md';
+import { Suspense, useEffect, useState, useRef } from 'react';
+import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
-import dynamic from 'next/dynamic';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetCurrentDateInISOFormat, GetCurrentMonthInRoman, GetPositionName, ZeroPad } from '@/utils/utility';
+import { GetCurrentDateInISOFormat, GetPositionName, ZeroPad } from '@/utils/utility';
 import { approveMessage, getMessageByUid } from '@/services/message';
 import { getUserByUid, getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -17,65 +16,23 @@ import axios from 'axios';
 import moment from 'moment';
 import { createMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
-
-import QRCodeStyling from "qr-code-styling";
 import { createMessageRejection } from '@/services/messageRejection';
 import { debounce } from 'lodash';
-
-const RichEditSignatureMemoComponent = dynamic(() => import('@/components/richEditSignatureMemo'), { ssr: false });
-const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
-const RichEditReadOnlyComponent = dynamic(() => import('@/components/richEditReadOnly'), { ssr: false });
-const RichEditSignatureComponent = dynamic(() => import('@/components/richEditSignature'), { ssr: false });
+import RichEditorSignatureMemoV2 from '@/components/richEditorSignatureMemoV2';
+import RichEditorReviewV2 from '@/components/richEditorReviewV2';
+import RichEditorSignatureV2 from '@/components/richEditorSignatureV2';
 
 export default function pageReview() {
     const router = useRouter()
     const [UID, setUID] = useState("");
-    const [dataMessage, setDataMessage] = useState()
+
+    const [loadingSubmit, setLoadingSubmit] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true)
 
+    const [currentDocument, setCurrentDocument] = useState("")
     const [currentMessageStatus, setCurrentMessageStatus] = useState()
     const [messageClassification, setMessageClassification] = useState()
-
-    const [contentQR, setContentQR] = useState("");
-    const [signatureDocument, setSignatureDocument] = useState("");
     const [messageNumberDocument, setMessageNumberDocument] = useState("")
-
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            if (contentQR != "") {
-                const qrCode = new QRCodeStyling({
-                    width: 80,
-                    height: 80,
-                    image:
-                        process.env.NEXT_PUBLIC_HOST_URL + "/logo-ppip.svg",
-                    dotsOptions: {
-                        color: "black",
-                        type: "rounded"
-                    },
-                    imageOptions: {
-                        crossOrigin: "anonymous",
-                        margin: 2,
-                        imageSize: 0.3
-                    }
-                });
-
-                qrCode.update({
-                    data: contentQR
-                });
-
-                // Convert Blob to Base64
-                qrCode.getRawData("png").then((blob) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        setSignatureDocument(reader.result); // Base64 string
-                    };
-                    reader.readAsDataURL(blob);
-                });
-            }
-        }
-
-    }, [contentQR]);
-
 
     const { role, recipientUID, name, fetchCount } = useLayoutContext();
     const [FormMessage] = Form.useForm()
@@ -88,29 +45,27 @@ export default function pageReview() {
     const [isModalRevisionOpen, setIsModalRevisionOpen] = useState(false)
     const [isModalRejectOpen, setIsModalRejectOpen] = useState(false)
 
-
-    const handleFinishSubmission = async()=>{}
     const handleBack = () => { setIsModalBackOpen(true) }
-    const handleApprove = () => {
+    const handleApprove = async () => {
         if (loadingSubmit) {
             return
         }
-        setTriggerUpdate(!triggerUpdate)
         setLoadingSubmit(true);
+        triggerEditorReviewUpdate();
         setTimeout(() => {
             if (messageClassification == 1) {
                 setIsModalApproveSuratKeluarOpen(true)
             } else {
                 setIsModalApproveMemoOpen(true)
             }
-            setTriggerSignature(!triggerSignature)
             setLoadingSubmit(false);
         }, 5000)
 
     }
     const handleRevision = () => { setIsModalRevisionOpen(true) }
     const handleReject = () => { setIsModalRejectOpen(true) }
-
+    const handleCancelRevision = () => { setIsModalRevisionOpen(false) }
+    const handleCancelReject = () => { setIsModalRejectOpen(false) }
     const handleCancelBack = () => { setIsModalBackOpen(false) }
     const handleCancelApprove = () => {
         if (messageClassification == 1) {
@@ -119,18 +74,13 @@ export default function pageReview() {
             setIsModalApproveMemoOpen(false)
         }
     }
-    const handleCancelRevision = () => { setIsModalRevisionOpen(false) }
-    const handleCancelReject = () => { setIsModalRejectOpen(false) }
-
     const handleConfirmBack = () => {
         router.push("/admin/daftarSurat")
     }
-
     const handleConfirmRevision = () => {
         if (loadingSubmit) {
             return
         }
-        setMessageStatus(5)
         setTimeout(() => {
             FormRevision.submit()
         }, 300)
@@ -141,7 +91,6 @@ export default function pageReview() {
         if (loadingSubmit) {
             return
         }
-        setMessageStatus(6)
         setTimeout(() => {
             FormRejection.submit()
         }, 300)
@@ -152,7 +101,9 @@ export default function pageReview() {
         try {
             const response = await getMessageByUid(uid)
             if (response && response.data) {
-                setDataMessage(response.data)
+                if (response.data?.ListMedia) {
+                    fetchMediaList(response.data?.ListMedia)
+                }
                 return response.data
             } else {
                 return null
@@ -162,18 +113,6 @@ export default function pageReview() {
             return null
         }
     }
-
-    const [triggerSaveReview, setTriggerSaveReview] = useState(false)
-    const [triggerSaveApprove, setTriggerSaveApprove] = useState(false)
-    const [triggerUpdate, setTriggerUpdate] = useState(false)
-    const [triggerReset, setTriggerReset] = useState(false)
-    const [triggerSignature, setTriggerSignature] = useState(false)
-
-    const [currentDocument, setCurrentDocument] = useState("")
-    const [messageStatus, setMessageStatus] = useState(0)
-
-    const [optionType, setOptionType] = useState([])
-    const [optionTemplate, setOptionTemplate] = useState([])
 
     const fetchTypeName = async () => {
         const response = await getTypeNameSurat();
@@ -199,15 +138,6 @@ export default function pageReview() {
             })
         }
         return []
-    }
-
-    const fetchTemplate = async (uid) => {
-        const response = await getTemplateSuratByUid(uid)
-        if (response) {
-            setTimeout(() => {
-                setCurrentDocument(response.data.Content)
-            }, 200)
-        }
     }
 
     const [optionNature, setOptionNature] = useState([])
@@ -241,7 +171,6 @@ export default function pageReview() {
         }
     }
 
-
     const handleOnReviewerSaveComplete = async (content) => {
         setLoadingSubmit(true); // Start loading spinner
         try {
@@ -262,7 +191,7 @@ export default function pageReview() {
         } catch (error) {
             message.error("Proses Gagal")
         } finally {
-            setLoadingSubmit(false); // Stop loading spinner
+            setLoadingSubmit(false);
         }
     }
 
@@ -292,18 +221,23 @@ export default function pageReview() {
         }
     }
 
-    const [loadingSubmit, setLoadingSubmit] = useState(false);
-    const [fileList, setFileList] = useState([]);
+    const handleOnUpdateDocument = (content) => {
+        try {
+            setCurrentDocument(content)
 
+        } catch (error) {
+            message.error("Proses Gagal")
+        }
+    }
 
     const handleFinishRejection = debounce(async () => {
-        setLoadingSubmit(true);
-        let data = FormRejection.getFieldsValue()
-        data.MessageUID = UID
-        data.FromUserUID = recipientUID
-        data.FromUserName = name;
-
         try {
+            setLoadingSubmit(true);
+            let data = FormRejection.getFieldsValue()
+            data.MessageUID = UID
+            data.FromUserUID = recipientUID
+            data.FromUserName = name;
+
             await createMessageRejection(data)
             message.success("Proses Berhasil")
             router.push("/admin/daftarSurat")
@@ -316,13 +250,13 @@ export default function pageReview() {
 
 
     const handleFinishRevision = debounce(async () => {
-        setLoadingSubmit(true);
-        let data = FormRevision.getFieldsValue()
-        data.MessageUID = UID
-        data.FromUserUID = recipientUID
-        data.FromUserName = name;
-
         try {
+            setLoadingSubmit(true);
+            let data = FormRevision.getFieldsValue()
+            data.MessageUID = UID
+            data.FromUserUID = recipientUID
+            data.FromUserName = name;
+
             await createMessageRevision(data)
             message.success("Proses Berhasil")
             router.push("/admin/daftarSurat")
@@ -339,20 +273,25 @@ export default function pageReview() {
         }
 
         try {
+            setLoadingSubmit(true)
             if (typeof window !== 'undefined') {
                 if (currentMessageStatus == 41) {
-                    setLoadingSubmit(true)
-                    setTriggerSaveReview(!triggerSaveReview)
+                    triggerEditorReviewSave()
                 } else if (currentMessageStatus == 42) {
-                    setLoadingSubmit(true)
-                    setTriggerSaveApprove(!triggerSaveApprove)
+                    if (messageClassification == 1) {
+                        triggerEditorSKSave()
+                    } else if (messageClassification == 2) {
+                        triggerEditorMemoSave()
+                    }
                 } else {
                     message.error('You are not allowed to perform this action')
                 }
             }
         } catch (error) {
-            setLoadingSubmit(false)
+            console.log(error);
             message.error('Terjadi kesalahan saat memproses approval')
+        } finally {
+            setLoadingSubmit(false)
         }
     }, 300)
 
@@ -370,41 +309,43 @@ export default function pageReview() {
     const [downloadingStates, setDownloadingStates] = useState({})
 
     const handleDownload = async (mediaUID, fileName) => {
-        try {
-            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
-            
-            const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
-                responseType: 'blob',
-            });
-            
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', fileName);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            
-            message.success(`File ${fileName} berhasil didownload`);
-        } catch (error) {
-            console.error('Error downloading file:', error);
-            message.error(`Gagal mendownload file ${fileName}`);
-        } finally {
-            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
+        if (typeof window !== 'undefined') {
+            try {
+                setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+
+                const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                    responseType: 'blob',
+                });
+
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', fileName);
+                document.body.appendChild(link);
+                link.click();
+                link.parentNode.removeChild(link);
+                window.URL.revokeObjectURL(url);
+
+                message.success(`File ${fileName} berhasil didownload`);
+            } catch (error) {
+                console.error('Error downloading file:', error);
+                message.error(`Gagal mendownload file ${fileName}`);
+            } finally {
+                setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
+            }
         }
     };
 
-    const fetchMediaList = async () => {
-        if (!dataMessage?.ListMedia || dataMessage.ListMedia === "") {
+    const fetchMediaList = async (listMedia) => {
+        if (listMedia || listMedia === "") {
             setMediaList([]);
             return;
         }
 
         try {
             // Split UIDs by comma
-            const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
-            
+            const mediaUIDs = listMedia.split(',').filter(uid => uid.trim() !== '');
+
             // Fetch all media details
             const mediaPromises = mediaUIDs.map(async (uid) => {
                 try {
@@ -436,12 +377,6 @@ export default function pageReview() {
         return ""
     }
 
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            fetchMediaList();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dataMessage]);
 
     useEffect(() => {
         fetchTypeName()
@@ -449,34 +384,31 @@ export default function pageReview() {
         fetchPriority()
         fetchUser()
 
-
         if (typeof window !== 'undefined') {
-            // Access query parameters from the URL
             const urlParams = new URLSearchParams(window.location.search);
             const uid = urlParams.get('uid');
 
             if (!uid) {
-                // No UID provided, redirect to daftarSurat
                 message.info('Surat tidak ditemukan')
                 router.push("/admin/daftarSurat")
                 return
             }
 
-            const handleMessage = async () => {
+            const handleMessage = async (uid) => {
                 try {
                     setIsLoadingData(true)
                     const data = await fetchMessage(uid)
 
                     if (!data) {
-                        // Data not found, redirect to daftarSurat
                         message.info('Data surat tidak ditemukan')
-                        router.push("/admin/daftarSurat")
+                        console.log(data)
+                        // router.push("/admin/daftarSurat")
                         return
                     }
 
+                    setCurrentDocument(data.MessageContent)
                     setCurrentMessageStatus(data.MessageStatus)
                     setMessageClassification(data.MessageClassification)
-
 
                     const userUID = window.localStorage.getItem('UserUID')
                     const messageCode = await getMessageCodeByUser(userUID)
@@ -487,12 +419,10 @@ export default function pageReview() {
                     const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
 
                     if (data.MessageClassification == 1) {
-                        setMessageNumberDocument(ZeroPad(data.EventNumberKeluar) + data.EventNumberSubKeluar + "-PSPIP"+"-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
+                        setMessageNumberDocument(ZeroPad(data.EventNumberKeluar) + data.EventNumberSubKeluar + "-PSPIP" + "-" + templateCode + "-" + messageCode + "-" + currentMonth + currentYear)
                     } else {
-                        setMessageNumberDocument(ZeroPad(data.EventNumberMemo) + data.EventNumberSubMemo + "-PSPIP-"+ templateCode +"-"+ messageCode +"-"+currentMonth +currentYear)
+                        setMessageNumberDocument(ZeroPad(data.EventNumberMemo) + data.EventNumberSubMemo + "-PSPIP-" + templateCode + "-" + messageCode + "-" + currentMonth + currentYear)
                     }
-
-                    setContentQR(data.UID)
 
                     FormMessage.setFieldValue('TypeUID', data.TypeUID)
                     FormMessage.setFieldValue('Title', data.Title)
@@ -510,7 +440,6 @@ export default function pageReview() {
                     }
 
                     const responseUser = await getUsers()
-
                     const optionUser = responseUser.data?.map((record) => {
                         return {
                             value: record.UID,
@@ -520,7 +449,7 @@ export default function pageReview() {
 
                     const optionTemplateName = await fetchTemplateName(data.TypeUID, data.MessageClassification)
 
-                    const selectedReviewer = data.ReviewerUID?.split(",").map(uid => 
+                    const selectedReviewer = data.ReviewerUID?.split(",").map(uid =>
                         optionUser.find(option => option.value === uid)
                     )
                     const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
@@ -534,27 +463,59 @@ export default function pageReview() {
                     FormMessage.setFieldValue('RecipientObject', selectedRecipient)
                     FormMessage.setFieldValue('TemplateObject', selectedTemplate)
 
-                    setTimeout(() => {
-                        setCurrentDocument(data.MessageContent)
-                    }, 300)
-
-                    
-                    
                     setIsLoadingData(false)
                 } catch (error) {
                     console.error("Error loading message:", error)
                     message.info('Gagal memuat data surat')
                     setIsLoadingData(false)
-                    // router.push("/admin/daftarSurat")
                 }
             }
-            handleMessage()
+            handleMessage(uid)
             setUID(uid)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
 
+    const getCurrentDocument = () => {
+        return currentDocument
+    }
+
+    const getMessageClassification = () => {
+        return messageClassification
+    }
+
+    const getMessageNumberDocument = () => {
+        return messageNumberDocument
+    }
+
+    const editorRefSK = useRef(null);
+    const editorRefMemo = useRef(null);
+    const editorRefReview = useRef(null);
+
+    const triggerEditorSKSave = () => {
+        if (editorRefSK.current) {
+            editorRefSK.current.triggerSaveSK();
+        }
+    };
+
+    const triggerEditorMemoSave = () => {
+        if (editorRefMemo.current) {
+            editorRefMemo.current.triggerSaveMemo();
+        }
+    };
+
+    const triggerEditorReviewSave = () => {
+        if (editorRefReview.current) {
+            editorRefReview.current.triggerSaveReview();
+        }
+    };
+
+    const triggerEditorReviewUpdate = () => {
+        if (editorRefReview.current) {
+            editorRefReview.current.triggerUpdateReview();
+        }
+    };
 
     if (isLoadingData) {
         return (
@@ -572,9 +533,9 @@ export default function pageReview() {
         <main>
             {/* Lock Screen Overlay */}
             {loadingSubmit && (isModalApproveMemoOpen || isModalApproveSuratKeluarOpen) && (
-                <div 
+                <div
                     className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[9999]"
-                    style={{ 
+                    style={{
                         position: 'fixed',
                         top: 0,
                         left: 0,
@@ -646,13 +607,12 @@ export default function pageReview() {
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
                     <h2 className="text-md font-semibold mb-5 text-gray-700">Detail Surat</h2>
                     <hr className="mb-8 bg-gray-300"></hr>
-                                            <Form
-                            layout='horizontal'
-                            labelCol={{ span: 5 }}
-                            colon={false}
-                            form={FormMessage}
-                            onFinish={handleFinishSubmission}
-                        >
+                    <Form
+                        layout='horizontal'
+                        labelCol={{ span: 5 }}
+                        colon={false}
+                        form={FormMessage}
+                    >
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
                                 <Form.Item
@@ -693,11 +653,7 @@ export default function pageReview() {
                                     rules={[{ required: true, message: 'Tolong masukan Jenis Surat' }]}
                                 >
                                     <Select
-                                        options={optionType}
                                         className="mb-3 w-full single"
-                                        onSelect={(value, _) => {
-                                            fetchTemplateName(value);
-                                        }}
                                         disabled
                                     />
                                 </Form.Item>
@@ -711,11 +667,7 @@ export default function pageReview() {
                                 >
                                     <Select
                                         labelInValue
-                                        options={optionTemplate}
                                         className="mb-3 w-full single"
-                                        onSelect={(option) => {
-                                            fetchTemplate(option.value)
-                                        }}
                                         disabled
                                     />
                                 </Form.Item>
@@ -888,7 +840,7 @@ export default function pageReview() {
                             <Col xs={24} md={12}></Col>
                         </Row>
                     </Form>
-                    
+
                     {/* Lampiran Section */}
                     <Row gutter={[24, 16]} className="mt-5">
                         <Col xs={24} md={12}>
@@ -897,8 +849,8 @@ export default function pageReview() {
                                 {mediaList.length > 0 ? (
                                     <div className="space-y-2">
                                         {mediaList.map((media, index) => (
-                                            <div 
-                                                key={media.UID} 
+                                            <div
+                                                key={media.UID}
                                                 className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
                                             >
                                                 <div className="flex items-center space-x-3 flex-1">
@@ -936,15 +888,13 @@ export default function pageReview() {
 
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
                     <Suspense fallback={<div>Loading...</div>}>
-                        <RichEditComponent
-                            currentDocument={currentDocument}
-                            setCurrentDocument={setCurrentDocument}
+                        <RichEditorReviewV2
+                            ref={editorRefReview}
+                            getCurrentDocument={getCurrentDocument}
+                            getMessageClassification={getMessageClassification}
                             onSaveComplete={handleOnReviewerSaveComplete}
-                            triggerSave={triggerSaveReview}
-                            triggerUpdate={triggerUpdate}
-                            triggerReset={triggerReset}
-                            messageClassification={messageClassification}
-                            isReviewerEnabled={true}
+                            onUpdateDocument={handleOnUpdateDocument}
+                            isOpen={true}
                         />
                     </Suspense>
                 </div>
@@ -1002,6 +952,7 @@ export default function pageReview() {
                     style={{
                         top: '10px'
                     }}
+                    destroyOnHidden={true}
                 >
                     <div className='font-semibold text-gray-700 mb-5 mt-5'>
                         Apakah anda yakin untuk menyetujui surat ini untuk dikirimkan  ?
@@ -1016,7 +967,7 @@ export default function pageReview() {
                             Batal
                         </button>
 
-                        <button 
+                        <button
                             className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleFinishApprove}
                             disabled={loadingSubmit}
@@ -1029,16 +980,12 @@ export default function pageReview() {
                         currentMessageStatus == 42 ?
                             (
                                 <Suspense fallback={<div>Loading...</div>}>
-                                    <RichEditSignatureMemoComponent
-                                        currentDocument={currentDocument}
-                                        setCurrentDocument={setCurrentDocument}
+                                    <RichEditorSignatureMemoV2
+                                        ref={editorRefMemo}
+                                        getCurrentDocument={getCurrentDocument}
+                                        getMessageNumberDocument={getMessageNumberDocument}
                                         onSaveComplete={handleOnSaveComplete}
-                                        triggerSave={triggerSaveApprove}
-                                        triggerSignature={triggerSignature}
-                                        setTriggerSignature={setTriggerSignature}
-                                        messageClassification={messageClassification}
-                                        signatureDocument={signatureDocument}
-                                        messageNumberDocument={messageNumberDocument}
+                                        isOpen={isModalApproveMemoOpen}
                                     />
                                 </Suspense>
                             ) :
@@ -1057,6 +1004,7 @@ export default function pageReview() {
                     style={{
                         top: '10px'
                     }}
+                    destroyOnHidden={true}
                 >
                     <div className='font-semibold text-gray-700 mb-5 mt-5'>
                         Apakah anda yakin untuk menyetujui surat ini untuk dikirimkan  ?
@@ -1070,38 +1018,32 @@ export default function pageReview() {
                             Batal
                         </button>
 
-                        <button 
+                        <button
                             className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleFinishApprove}
                             disabled={loadingSubmit}
+                            htmlType='submit'
                         >
                             {loadingSubmit ? 'Memproses...' : 'Konfirmasi'}
                         </button>
                     </div>
 
-
                     {
                         currentMessageStatus == 42 ?
                             (
                                 <Suspense fallback={<div>Loading...</div>}>
-                                    <RichEditSignatureComponent
-                                        currentDocument={currentDocument}
-                                        setCurrentDocument={setCurrentDocument}
+                                    <RichEditorSignatureV2
+                                        ref={editorRefSK}
+                                        getCurrentDocument={getCurrentDocument}
+                                        getMessageNumberDocument={getMessageNumberDocument}
                                         onSaveComplete={handleOnSaveComplete}
-                                        triggerSave={triggerSaveApprove}
-                                        triggerSignature={triggerSignature}
-                                        setTriggerSignature={setTriggerSignature}
-                                        messageClassification={messageClassification}
-                                        signatureDocument={signatureDocument}
-                                        messageNumberDocument={messageNumberDocument}
+                                        isOpen={isModalApproveSuratKeluarOpen}
                                     />
                                 </Suspense>
-                            ) :
-                            null
+                            ) : ""
                     }
 
 
-                    
                 </Modal>
 
 

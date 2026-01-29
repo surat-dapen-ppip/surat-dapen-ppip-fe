@@ -15,10 +15,7 @@ import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { debounce } from 'lodash';
-
-
 const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
-
 
 export default function pageMemoDinas() {
     const router = useRouter()

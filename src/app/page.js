@@ -104,7 +104,6 @@ export default function LoginPage() {
                             </Form.Item>
 
                             <button
-                                htmlType="submit"
                                 className="mt-5 w-full bg-blue-900 text-white py-3 rounded-lg font-semibold text-lg"
                             >
                                 Masuk
