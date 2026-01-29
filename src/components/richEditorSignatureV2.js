@@ -67,7 +67,7 @@ const RichEditorSignatureV2 = forwardRef(({
             }
 
             richEditRef.current.exportToBase64(function (documentAsBase64) {
-                // onSaveComplete(documentAsBase64);
+                onSaveComplete(documentAsBase64);
                 alert('Document berhasil disimpan')
             });
         } catch (error) {
@@ -79,7 +79,7 @@ const RichEditorSignatureV2 = forwardRef(({
         if (typeof window !== "undefined" && isOpen) {
             setIsLoading(true);
 
-            (async () => {
+            const init = async () => {
                 const richEditModule = await import("devexpress-richedit");
                 const { create, createOptions, ViewType, RichEditUnit } = richEditModule;
 
@@ -150,15 +150,10 @@ const RichEditorSignatureV2 = forwardRef(({
 
                 richEditRef.current = richEditor;
                 setIsLoading(false);
-            })();
-        }
-
-        return () => {
-            if (richEditRef.current) {
-                richEditRef.current.dispose();
-                richEditRef.current = null;
             }
-        };
+
+            init()
+        }
 
     }, [isOpen, getCurrentDocument, getMessageNumberDocument]);
 
@@ -166,7 +161,7 @@ const RichEditorSignatureV2 = forwardRef(({
     return (
         <Spin spinning={isLoading} tip="Sedang menggenerate signature, mohon tunggu...">
             <div>
-                <div ref={richEditRef} id="richEditSignature"></div>
+                <div id="richEditSignature"></div>
             </div>
         </Spin>
     );

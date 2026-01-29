@@ -224,6 +224,7 @@ export default function pageReview() {
     const handleOnUpdateDocument = (content) => {
         try {
             setCurrentDocument(content)
+            
         } catch (error) {
             message.error("Proses Gagal")
         }
@@ -275,9 +276,9 @@ export default function pageReview() {
             setLoadingSubmit(true)
             if (typeof window !== 'undefined') {
                 if (currentMessageStatus == 41) {
-                    triggerEditorMemoSave()
+                    editorRefMemo.current.triggerSaveMemo()
                 } else if (currentMessageStatus == 42) {
-                    triggerEditorSKSave()
+                    editorRefSK.current.triggerSaveSK()
                 } else {
                     message.error('You are not allowed to perform this action')
                 }
@@ -1010,6 +1011,7 @@ export default function pageReview() {
                             className={`flex-1 bg-green-500 text-white py-3 rounded font-semibold ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={handleFinishApprove}
                             disabled={loadingSubmit}
+                            htmlType='submit'
                         >
                             {loadingSubmit ? 'Memproses...' : 'Konfirmasi'}
                         </button>

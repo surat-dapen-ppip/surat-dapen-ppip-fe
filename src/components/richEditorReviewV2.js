@@ -68,7 +68,6 @@ const RichEditorReviewV2 = forwardRef(({
     }, [onSaveComplete])
 
     const handleUpdate = useCallback(() => {
-        alert('updated here')
         try {
             const textMessage = richEditRef.current.document.getText();
             if (isEmptyOrWhitespace(textMessage)) {
@@ -91,7 +90,7 @@ const RichEditorReviewV2 = forwardRef(({
         if (typeof window !== "undefined" && isOpen) {
             setIsLoading(true);
 
-            (async () => {
+            const init = async () => {
                 const richEditModule = await import("devexpress-richedit");
                 const { create, createOptions, ViewType, RichEditUnit } = richEditModule;
 
@@ -125,17 +124,11 @@ const RichEditorReviewV2 = forwardRef(({
                 richEditor.openDocument(getCurrentDocument(), "DocumentName", 4);
                 richEditRef.current = richEditor;
                 setIsLoading(false);
-            })();
+            }
+            init();
         }
 
-        return () => {
-            if (richEditRef.current) {
-                richEditRef.current.dispose();
-                richEditRef.current = null;
-            }
-        };
-
-    }, [isOpen, getCurrentDocument]);
+    }, [isOpen]);
 
 
     return (
