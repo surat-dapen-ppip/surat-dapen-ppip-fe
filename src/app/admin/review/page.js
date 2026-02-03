@@ -337,7 +337,7 @@ export default function pageReview() {
     };
 
     const fetchMediaList = async (listMedia) => {
-        if (listMedia || listMedia === "") {
+        if (!listMedia || listMedia === "") {
             setMediaList([]);
             return;
         }
