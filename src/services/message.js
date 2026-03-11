@@ -207,13 +207,17 @@ export const countMessagesOnlyUser = async (status, userUID) => {
 };
 
 
-export const getMessagesBothUser = async (status, userUID, statusSecondary) => {
+export const getMessagesBothUser = async (status, userUID, statusSecondary, category, title, startDate, endDate) => {
   try {
     const response = await axiosInstance.get('/messageMaster/bothUser', {
       params: {
         status: status,
         userUID: userUID,
-        statusSecondary: statusSecondary
+        statusSecondary: statusSecondary,
+        category: category,
+        title: title,
+        startDate: startDate,
+        endDate: endDate,
       }
     });
     return response.data;

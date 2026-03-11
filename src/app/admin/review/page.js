@@ -17,7 +17,7 @@ import moment from 'moment';
 import { createMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
 import { createMessageRejection } from '@/services/messageRejection';
-import { debounce } from 'lodash';
+import { debounce, set } from 'lodash';
 import RichEditorSignatureMemoV2 from '@/components/richEditorSignatureMemoV2';
 import RichEditorReviewV2 from '@/components/richEditorReviewV2';
 import RichEditorSignatureV2 from '@/components/richEditorSignatureV2';
@@ -30,6 +30,7 @@ export default function pageReview() {
     const [isLoadingData, setIsLoadingData] = useState(true)
 
     const [currentDocument, setCurrentDocument] = useState("")
+    const [currentMessageRemark, setCurrentMessageRemark] = useState(false)
     const [currentMessageStatus, setCurrentMessageStatus] = useState()
     const [messageClassification, setMessageClassification] = useState()
     const [messageNumberDocument, setMessageNumberDocument] = useState("")
@@ -44,6 +45,7 @@ export default function pageReview() {
     const [isModalBackOpen, setIsModalBackOpen] = useState(false)
     const [isModalRevisionOpen, setIsModalRevisionOpen] = useState(false)
     const [isModalRejectOpen, setIsModalRejectOpen] = useState(false)
+
 
     const handleBack = () => { setIsModalBackOpen(true) }
     const handleApprove = async () => {
@@ -406,6 +408,7 @@ export default function pageReview() {
                         return
                     }
 
+                    setCurrentMessageRemark(data.MessageRemarkSender)
                     setCurrentDocument(data.MessageContent)
                     setCurrentMessageStatus(data.MessageStatus)
                     setMessageClassification(data.MessageClassification)
@@ -430,6 +433,7 @@ export default function pageReview() {
                     FormMessage.setFieldValue('NatureUID', data.NatureUID)
                     FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
                     FormMessage.setFieldValue('Information', data.Information)
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
 
                     if (data.MessageClassification == 1) {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
@@ -487,6 +491,10 @@ export default function pageReview() {
 
     const getMessageNumberDocument = () => {
         return messageNumberDocument
+    }
+
+    const getCurrentMessageRemark = () => {
+        return currentMessageRemark
     }
 
     const editorRefSK = useRef(null);
@@ -797,6 +805,25 @@ export default function pageReview() {
                             <Col xs={24} md={12}></Col>
                         </Row>
 
+                        {messageClassification == 1 && (
+                            <Row gutter={[24, 16]}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        label="Tujuan Surat External"
+                                        name={"MessageRemarkSender"}
+                                    >
+                                        <input
+                                            type="text"
+                                            placeholder="Input Judul Surat Masuk"
+                                            className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                            disabled
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}></Col>
+                            </Row>
+                        )}
+
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
                                 <Form.Item
@@ -892,6 +919,7 @@ export default function pageReview() {
                             ref={editorRefReview}
                             getCurrentDocument={getCurrentDocument}
                             getMessageClassification={getMessageClassification}
+                            getCurrentMessageRemark={getCurrentMessageRemark}
                             onSaveComplete={handleOnReviewerSaveComplete}
                             onUpdateDocument={handleOnUpdateDocument}
                             isOpen={true}
@@ -1036,6 +1064,7 @@ export default function pageReview() {
                                         ref={editorRefSK}
                                         getCurrentDocument={getCurrentDocument}
                                         getMessageNumberDocument={getMessageNumberDocument}
+                                        getCurrentMessageRemark={getCurrentMessageRemark}
                                         onSaveComplete={handleOnSaveComplete}
                                         isOpen={isModalApproveSuratKeluarOpen}
                                     />

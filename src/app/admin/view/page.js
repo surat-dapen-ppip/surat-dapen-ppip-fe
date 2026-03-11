@@ -21,6 +21,8 @@ export default function pageView() {
     const router = useRouter()
 
     const [dataMessage, setDataMessage] = useState()
+    const [messageClassification, setMessageClassification] = useState()
+
     const [isLoadingData, setIsLoadingData] = useState(true)
     const [FormMessage] = Form.useForm()
 
@@ -222,6 +224,7 @@ export default function pageView() {
                     FormMessage.setFieldValue('NatureUID', data.NatureUID)
                     FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
                     FormMessage.setFieldValue('Information', data.Information)
+                    setMessageClassification(data.MessageClassification)
 
                     if (data.MessageClassification == 1) {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
@@ -230,6 +233,8 @@ export default function pageView() {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                         FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
                     }
+
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
 
                     const responseUser = await getUsers()
                     const optionUser = responseUser.data?.map((record) => {
@@ -487,6 +492,25 @@ export default function pageView() {
                             </Col>
                             <Col xs={24} md={12}></Col>
                         </Row>
+
+                        {messageClassification == 1 && (
+                            <Row gutter={[24, 16]}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        label="Tujuan Surat External"
+                                        name={"MessageRemarkSender"}
+                                    >
+                                        <input
+                                            type="text"
+                                            placeholder="Input Judul Surat Masuk"
+                                            className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                            disabled
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}></Col>
+                            </Row>
+                        )}
 
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>

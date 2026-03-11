@@ -2,7 +2,7 @@
 "use client"
 
 import { Button, Form, message, Modal, Popconfirm, Select, Spin, Upload, Row, Col, Space } from 'antd';
-import { MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner,MdRestoreFromTrash, MdUpload } from 'react-icons/md';
+import { MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner, MdRestoreFromTrash, MdUpload } from 'react-icons/md';
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -84,6 +84,7 @@ export default function pageDraft() {
     const [triggerSave, setTriggerSave] = useState(false)
     const [triggerReset, setTriggerReset] = useState(false)
     const [currentDocument, setCurrentDocument] = useState("")
+    const [isMessageRemark, setIsMessageRemark] = useState(false)
     const [messageStatus, setMessageStatus] = useState(0)
 
     const [optionType, setOptionType] = useState([])
@@ -359,7 +360,7 @@ export default function pageDraft() {
             setMessageCounter(response.data)
             FormMessage.setFieldValue("EventNumber", response.data)
             return response.data
-        }else{
+        } else {
             return -1
         }
     }
@@ -367,16 +368,16 @@ export default function pageDraft() {
     const handleFinishSubmission = debounce(async () => {
         const data = FormMessage.getFieldsValue()
         const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
-        
+
         let eventNumber = ""
-        if(dataMessage?.MessageClassification == 1){
+        if (dataMessage?.MessageClassification == 1) {
             eventNumber = dataMessage?.EventNumberKeluar
         }
-        else if(dataMessage?.MessageClassification == 2){
+        else if (dataMessage?.MessageClassification == 2) {
             eventNumber = dataMessage?.EventNumberMemo
         }
 
-        if(eventNumber == ""){
+        if (eventNumber == "") {
             message.warning("Gagal melakukan pengecekan nomor surat")
         }
 
@@ -438,7 +439,7 @@ export default function pageDraft() {
     const fetchMediaList = useCallback(async () => {
         try {
             let mediaUIDs = []
-            
+
             // Handle both string and array formats
             if (Array.isArray(dataMessage?.ListMedia)) {
                 mediaUIDs = dataMessage.ListMedia.filter(Boolean)
@@ -473,7 +474,7 @@ export default function pageDraft() {
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            if (dataMessage?.ListMedia && 
+            if (dataMessage?.ListMedia &&
                 (Array.isArray(dataMessage.ListMedia) ? dataMessage.ListMedia.length > 0 : dataMessage.ListMedia !== "")) {
                 fetchMediaList()
             } else {
@@ -566,7 +567,7 @@ export default function pageDraft() {
                     }, 300)
 
                     fetchTemplateName(data.TypeUID, messageClassification)
-                    
+
                     setIsLoadingData(false)
                 } catch (error) {
                     console.error("Error loading message:", error)
@@ -804,6 +805,9 @@ export default function pageDraft() {
                         </Row>
 
 
+                        
+
+
                         {/* Tujuan */}
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
@@ -827,6 +831,32 @@ export default function pageDraft() {
                             </Col>
                             <Col xs={24} md={12}></Col>
                         </Row>
+
+                        {messageClassification == 1 && (
+                            <Row gutter={[24, 16]}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        label="Tujuan Surat External"
+                                        name={"MessageRemarkSender"}
+                                    >
+                                        <input
+                                            type="text"
+                                            placeholder="Input Judul Surat Masuk"
+                                            className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                if (value.trim() !== "") {
+                                                    setIsMessageRemark(true);
+                                                } else {
+                                                    setIsMessageRemark(false);
+                                                }
+                                            }}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}></Col>
+                            </Row>
+                        )}
 
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
@@ -890,8 +920,8 @@ export default function pageDraft() {
                                         <Button icon={<MdUpload />}>Pilih File Baru (Maks. 3 total)</Button>
                                     </Upload>
                                     <p className="text-xs text-gray-500 mt-2">
-                                        File yang sudah ada: {dataMediaList.length - removedMediaUIDs.length} | 
-                                        File baru: {fileList.length} | 
+                                        File yang sudah ada: {dataMediaList.length - removedMediaUIDs.length} |
+                                        File baru: {fileList.length} |
                                         Total: {dataMediaList.length - removedMediaUIDs.length + fileList.length}/3
                                     </p>
                                 </Form.Item>
@@ -909,8 +939,8 @@ export default function pageDraft() {
                                 {dataMediaList.length > 0 ? (
                                     <div className="space-y-2">
                                         {dataMediaList.map((media, index) => (
-                                            <div 
-                                                key={media.UID} 
+                                            <div
+                                                key={media.UID}
                                                 className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
                                             >
                                                 <div className="flex items-center space-x-3 flex-1">
@@ -974,6 +1004,7 @@ export default function pageDraft() {
                             triggerSave={triggerSave}
                             triggerReset={triggerReset}
                             messageClassification={messageClassification}
+                            isMessageRemark={isMessageRemark}
                         />
                     </Suspense>
                 </div>

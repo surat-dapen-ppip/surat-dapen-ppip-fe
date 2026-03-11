@@ -10,6 +10,7 @@ import QRCodeStyling from "qr-code-styling";
 const RichEditorSignatureV2 = forwardRef(({
     getCurrentDocument,
     getMessageNumberDocument,
+    getCurrentMessageRemark,
     onSaveComplete,
     isOpen,
 }, ref) => {
@@ -137,6 +138,7 @@ const RichEditorSignatureV2 = forwardRef(({
                         })
 
                         richEditor._native.core.searchManager.replaceAll("[NO_SURAT]", getMessageNumberDocument(), true)
+                        richEditor._native.core.searchManager.replaceAll("[TUJUAN_EKSTERNAL]", getCurrentMessageRemark(), true)
 
                         const today = new Date();
                         const day = String(today.getDate()).padStart(2, '0');
