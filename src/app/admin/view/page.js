@@ -13,8 +13,11 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import moment from 'moment';
 import { getMediaByUid } from '@/services/media';
-import { MdDownload, MdInsertDriveFile } from 'react-icons/md';
+import { MdDownload, MdInsertDriveFile, MdVisibility } from 'react-icons/md';
 import RichEditorReadOnlyV2 from '@/components/richEditorReadOnlyV2';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 
 export default function pageView() {
@@ -119,6 +122,13 @@ export default function pageView() {
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const handleDownload = async (mediaUID, fileName) => {
         if (typeof window !== 'undefined') {
@@ -579,17 +589,27 @@ export default function pageView() {
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <Button
-                                                    type="primary"
-                                                    icon={<MdDownload />}
-                                                    onClick={() => handleDownload(media.UID, media.Name)}
-                                                    loading={downloadingStates[media.UID]}
-                                                    disabled={downloadingStates[media.UID]}
-                                                    size="small"
-                                                    className="flex-shrink-0"
-                                                >
-                                                    {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
-                                                </Button>
+                                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                                    {isPdfFile(media.Name) && (
+                                                        <Button
+                                                            icon={<MdVisibility />}
+                                                            onClick={() => handlePreview(media.UID, media.Name)}
+                                                            size="small"
+                                                        >
+                                                            Preview
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<MdDownload />}
+                                                        onClick={() => handleDownload(media.UID, media.Name)}
+                                                        loading={downloadingStates[media.UID]}
+                                                        disabled={downloadingStates[media.UID]}
+                                                        size="small"
+                                                    >
+                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                    </Button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -614,6 +634,13 @@ export default function pageView() {
                     </Suspense>
                 </div>
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

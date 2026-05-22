@@ -15,7 +15,7 @@ export default function RichEditComponent({
   onSaveComplete,
   messageClassification,
   isReviewerEnabled,
-  isMessageRemark,
+  isMessageRemark = false,
   setLoadingSubmit,
 }) {
   const richEditRef = useRef(null);

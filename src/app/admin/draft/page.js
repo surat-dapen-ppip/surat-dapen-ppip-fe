@@ -685,11 +685,16 @@ export default function pageDraft() {
                                     rules={[{ required: true, message: 'Tolong masukan Jenis Surat' }]}
                                 >
                                     <Select
-                                        options={optionType}
+                                        showSearch
+                                        filterOption={(input, option) =>
+                                            option.label.toLowerCase().includes(input.toLowerCase())
+                                        }
+                                        options={optionType.sort((a, b) => a.label.localeCompare(b.label))}
                                         className="mb-3 w-full single"
                                         onSelect={(value, _) => {
-                                            fetchTemplateName(value, messageClassification);
+                                            fetchTemplateName(value, data.messageClassification);
                                         }}
+                                        placeholder="Pilih Jenis Surat"
                                     />
                                 </Form.Item>
                             </Col>
@@ -805,7 +810,7 @@ export default function pageDraft() {
                         </Row>
 
 
-                        
+
 
 
                         {/* Tujuan */}

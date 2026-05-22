@@ -2,7 +2,7 @@
 "use client"
 
 import { Button, Form, Input, message, Modal, Select, Spin, Row, Col } from 'antd';
-import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner } from 'react-icons/md';
+import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useState, useRef } from 'react';
 import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -21,6 +21,9 @@ import { debounce, set } from 'lodash';
 import RichEditorSignatureMemoV2 from '@/components/richEditorSignatureMemoV2';
 import RichEditorReviewV2 from '@/components/richEditorReviewV2';
 import RichEditorSignatureV2 from '@/components/richEditorSignatureV2';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 export default function pageReview() {
     const router = useRouter()
@@ -309,6 +312,13 @@ export default function pageReview() {
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const handleDownload = async (mediaUID, fileName) => {
         if (typeof window !== 'undefined') {
@@ -891,17 +901,27 @@ export default function pageReview() {
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <Button
-                                                    type="primary"
-                                                    icon={<MdDownload />}
-                                                    onClick={() => handleDownload(media.UID, media.Name)}
-                                                    loading={downloadingStates[media.UID]}
-                                                    disabled={downloadingStates[media.UID]}
-                                                    size="small"
-                                                    className="flex-shrink-0"
-                                                >
-                                                    {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
-                                                </Button>
+                                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                                    {isPdfFile(media.Name) && (
+                                                        <Button
+                                                            icon={<MdVisibility />}
+                                                            onClick={() => handlePreview(media.UID, media.Name)}
+                                                            size="small"
+                                                        >
+                                                            Preview
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<MdDownload />}
+                                                        onClick={() => handleDownload(media.UID, media.Name)}
+                                                        loading={downloadingStates[media.UID]}
+                                                        disabled={downloadingStates[media.UID]}
+                                                        size="small"
+                                                    >
+                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                    </Button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1143,6 +1163,13 @@ export default function pageReview() {
                     </div>
                 </Modal>
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

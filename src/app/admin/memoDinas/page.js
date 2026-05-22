@@ -461,13 +461,17 @@ export default function pageMemoDinas() {
                             </Row>
                             <Row gutter={[24, 16]}>
                                 <Col xs={24} md={12}>
-                                    <Form.Item
+                                     <Form.Item
                                         label="Jenis Surat"
                                         name={'TypeUID'}
                                         rules={[{ required: true, message: 'Tolong masukan Jenis Surat' }]}
                                     >
                                         <Select
-                                            options={optionType}
+                                            showSearch
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
+                                            options={optionType.sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3 w-full single"
                                             onSelect={(value, _) => {
                                                 fetchTemplateName(value);

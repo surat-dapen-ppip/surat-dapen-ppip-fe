@@ -2,7 +2,7 @@
 "use client"
 
 import { Button, Col, DatePicker, Form, message, Modal, Popconfirm, Row, Select, Space, Spin, Upload } from 'antd';
-import { MdArrowBack, MdCheck, MdClear, MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn, MdUpload } from 'react-icons/md';
+import { MdArrowBack, MdCheck, MdClear, MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn, MdUpload, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -19,6 +19,9 @@ import { GetBaseTemplate } from '@/utils/messageUtil';
 import { getMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
 import { debounce } from 'lodash';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
 
@@ -411,6 +414,13 @@ export default function pageDraft() {
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
     const [removedMediaUIDs, setRemovedMediaUIDs] = useState([])
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const handleRemoveMedia = (mediaUID) => {
         // Add to removed list
@@ -677,11 +687,16 @@ export default function pageDraft() {
                                         rules={[{ required: true, message: 'Tolong masukan Jenis Surat' }]}
                                     >
                                         <Select
-                                            options={optionType}
+                                            showSearch
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
+                                            options={optionType.sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3 w-full single"
                                             onSelect={(value, _) => {
-                                                fetchTemplateName(value, messageClassification);
+                                                fetchTemplateName(value, data.messageClassification);
                                             }}
+                                            placeholder="Pilih Jenis Surat"
                                         />
                                     </Form.Item>
 
@@ -884,6 +899,15 @@ export default function pageDraft() {
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center space-x-2">
+                                                            {isPdfFile(media.Name) && (
+                                                                <Button
+                                                                    icon={<MdVisibility />}
+                                                                    onClick={() => handlePreview(media.UID, media.Name)}
+                                                                    size="small"
+                                                                >
+                                                                    Preview
+                                                                </Button>
+                                                            )}
                                                             <Button
                                                                 type="primary"
                                                                 icon={<MdDownload />}
@@ -1023,6 +1047,13 @@ export default function pageDraft() {
                     </div>
                 </Modal>
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

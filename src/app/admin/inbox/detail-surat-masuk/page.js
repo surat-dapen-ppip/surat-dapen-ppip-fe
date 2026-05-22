@@ -2,8 +2,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from 'react'
-import { Form, Modal, Select, Table, Tabs, DatePicker, message, Space, Input, Spin, Row, Col } from 'antd';
-import { MdClear, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn } from 'react-icons/md';
+import { Button, Form, Modal, Select, Table, Tabs, DatePicker, message, Space, Input, Spin, Row, Col } from 'antd';
+import { MdClear, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn, MdVisibility } from 'react-icons/md';
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import moment from 'moment'
@@ -20,11 +20,14 @@ import axios from 'axios';
 import { getMediaByUid } from '@/services/media';
 import Draggable from 'react-draggable';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
 import '../suratMasuk/suratMasuk.css';
 
 import { Viewer, Worker } from '@react-pdf-viewer/core';
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 
 export default function pageDetailSuratMasuk() {
@@ -54,6 +57,75 @@ export default function pageDetailSuratMasuk() {
     const [downloading, setDownloading] = useState(false)
     const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
     const [watermarkedPdfUrl, setWatermarkedPdfUrl] = useState(null);
+
+    // Lampiran state (MessageContentMediaUID - additional attachments)
+    const [lampiranMediaList, setLampiranMediaList] = useState([])
+    const [downloadingStates, setDownloadingStates] = useState({})
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreviewLampiran = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreviewLampiran = () => setPreviewMedia(null);
+
+    const handleDownloadLampiran = async (mediaUID, fileName) => {
+        if (typeof window === 'undefined') return;
+        try {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
+
+            const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
+                responseType: 'blob',
+            });
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            message.success(`File ${fileName} berhasil didownload`);
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            message.error(`Gagal mendownload file ${fileName}`);
+        } finally {
+            setDownloadingStates(prev => ({ ...prev, [mediaUID]: false }));
+        }
+    };
+
+    const fetchLampiranMediaList = async (listMedia) => {
+        if (!listMedia || listMedia === "") {
+            setLampiranMediaList([]);
+            return;
+        }
+
+        try {
+            const mediaUIDs = listMedia.split(',').filter(uid => uid.trim() !== '');
+
+            const mediaPromises = mediaUIDs.map(async (uid) => {
+                try {
+                    const response = await getMediaByUid(uid.trim());
+                    if (response && response.data) {
+                        return response.data;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error(`Error fetching media ${uid}:`, error);
+                    return null;
+                }
+            });
+
+            const results = await Promise.all(mediaPromises);
+            const validMedia = results.filter(media => media !== null);
+            setLampiranMediaList(validMedia);
+        } catch (error) {
+            console.error('Error fetching lampiran media list:', error);
+            setLampiranMediaList([]);
+        }
+    };
 
 
     const [disabled, setDisabled] = useState(true);
@@ -361,6 +433,9 @@ export default function pageDetailSuratMasuk() {
                 setDataMedia(null)
                 setPdfBlobUrl(null)
             }
+
+            // Fetch lampiran (MessageContentMediaUID) list whenever dataMessage changes
+            fetchLampiranMediaList(dataMessage?.MessageContentMediaUID)
         }
 
     }, [dataMessage]);
@@ -612,6 +687,62 @@ export default function pageDetailSuratMasuk() {
                                         <p>{dataMedia == null ? (<>Tidak ada lampiran</>) : (<>Loading File....</>)}</p>
                                     )}
                                 </div>
+                            </Col>
+                            <Col xs={24} md={12}></Col>
+                        </Row>
+                    </div>
+
+                    {/* Lampiran Section (MessageContentMediaUID) */}
+                    <div className="p-4 md:p-6 bg-white shadow-sm rounded mt-5">
+                        <h3 className="text-md font-semibold mb-3 text-gray-700">Lampiran</h3>
+                        <hr className="mb-5 bg-gray-300"></hr>
+                        <Row gutter={[24, 16]}>
+                            <Col xs={24} md={12}>
+                                {lampiranMediaList.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {lampiranMediaList.map((media, index) => (
+                                            <div
+                                                key={media.UID}
+                                                className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+                                            >
+                                                <div className="flex items-center space-x-3 flex-1">
+                                                    <MdInsertDriveFile className="text-blue-500 text-xl flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-gray-700 truncate">
+                                                            {media.Name}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            File {index + 1} dari {lampiranMediaList.length}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                                    {isPdfFile(media.Name) && (
+                                                        <Button
+                                                            icon={<MdVisibility />}
+                                                            onClick={() => handlePreviewLampiran(media.UID, media.Name)}
+                                                            size="small"
+                                                        >
+                                                            Preview
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<MdDownload />}
+                                                        onClick={() => handleDownloadLampiran(media.UID, media.Name)}
+                                                        loading={downloadingStates[media.UID]}
+                                                        disabled={downloadingStates[media.UID]}
+                                                        size="small"
+                                                    >
+                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-500 italic">Tidak ada lampiran</p>
+                                )}
                             </Col>
                             <Col xs={24} md={12}></Col>
                         </Row>
@@ -1081,6 +1212,13 @@ export default function pageDetailSuratMasuk() {
                 </Modal>
 
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreviewLampiran}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
 
         </main >
     )
