@@ -67,7 +67,17 @@ export default function pageReview() {
         }, 5000)
 
     }
-    const handleRevision = () => { setIsModalRevisionOpen(true) }
+    const handleRevision = () => {
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true);
+        triggerEditorReviewUpdate();
+        setTimeout(() => {
+            setIsModalRevisionOpen(true)
+            setLoadingSubmit(false);
+        }, 5000)
+    }
     const handleReject = () => { setIsModalRejectOpen(true) }
     const handleCancelRevision = () => { setIsModalRevisionOpen(false) }
     const handleCancelReject = () => { setIsModalRejectOpen(false) }
@@ -229,7 +239,6 @@ export default function pageReview() {
     const handleOnUpdateDocument = (content) => {
         try {
             setCurrentDocument(content)
-
         } catch (error) {
             message.error("Proses Gagal")
         }
@@ -261,6 +270,7 @@ export default function pageReview() {
             data.MessageUID = UID
             data.FromUserUID = recipientUID
             data.FromUserName = name;
+            data.Document = getCurrentDocument()
 
             await createMessageRevision(data)
             message.success("Proses Berhasil")

@@ -195,7 +195,7 @@ export default function pageDetailSuratMasuk() {
                     const boxHeight = watermarkText.length * (textSize + 5) + borderPadding * 2;
 
                     const boxX = 100;
-                    const boxY = height - 100;
+                    const boxY = height - boxHeight - 100;
 
                     // Draw the border box
                     page.drawRectangle({
@@ -211,7 +211,7 @@ export default function pageDetailSuratMasuk() {
 
                     page.drawText("CONFIDENTAL DOCUMENT", {
                         x: boxX + borderPadding,
-                        y: boxY + boxHeight - borderPadding - textSize * (0 + 1),
+                        y: boxY + boxHeight - borderPadding - textSize,
                         size: 12,
                         font: customFont,
                         color: rgb(1, 0, 0),
