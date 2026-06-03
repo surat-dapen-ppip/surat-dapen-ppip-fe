@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
-import { getHistory, getHistoryNoStatus, getMessages } from "@/services/message";
-import { Input, message, Select, Space, Table } from "antd";
+import { exportHistory, getHistory, getHistoryNoStatus, getMessages } from "@/services/message";
+import { Button, Input, message, Select, Space, Table } from "antd";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import CryptoJS from 'crypto-js';
@@ -37,6 +37,7 @@ export default function pageHistory() {
     const [MessageSender, setMessageSender] = useState("")
     const [MessageOrder, setMessageOrder] = useState("")
     const [MessageCategory, setMessageCategory] = useState("")
+    const [exporting, setExporting] = useState(false)
 
 
 
@@ -95,7 +96,49 @@ export default function pageHistory() {
                 }
             }
         }
+    }
 
+    const handleExport = async () => {
+        if (typeof window === 'undefined') return
+
+        try {
+            setExporting(true)
+            const currentRoleID = window.localStorage.getItem('RoleID');
+            let roleID = 0
+            for (let i = 0; i <= 2; i++) {
+                if (CryptoJS.HmacMD5(i, 'EE_MENCRET') == currentRoleID) {
+                    roleID = i
+                    break;
+                }
+            }
+
+            const userUID = window.localStorage.getItem('UserUID')
+            const response = roleID != 0
+                ? await exportHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory)
+                : await exportHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, "true")
+
+            const disposition = response.headers['content-disposition']
+            let filename = 'history.xlsx'
+            if (disposition) {
+                const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+                if (match?.[1]) {
+                    filename = match[1].replace(/['"]/g, '')
+                }
+            }
+
+            const url = window.URL.createObjectURL(new Blob([response.data]))
+            const link = document.createElement('a')
+            link.href = url
+            link.setAttribute('download', filename)
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(url)
+        } catch (error) {
+            message.error('Gagal mengekspor data history')
+        } finally {
+            setExporting(false)
+        }
     }
 
     const fetchUser = async () => {
@@ -318,6 +361,14 @@ export default function pageHistory() {
                                     placeholder={"Order By"}
                                 />
                             </div>
+                            <Button
+                                loading={exporting}
+                                onClick={handleExport}
+                                size="large"
+                                type="primary"
+                            >
+                                Export
+                            </Button>
                         </Space>
                     </div>
                 </div>

@@ -327,6 +327,27 @@ export const getHistory = async (userUID, keyword, MessageNumber, MessageSender,
     throw error.response?.data || error;
   }
 };
+
+export const exportHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin) => {
+  try {
+    const response = await axiosInstance.get('/history/export', {
+      params: {
+        userUID: userUID,
+        messageSender: MessageSender,
+        messageClassification: MessageCategory,
+        messageNumber: MessageNumber,
+        orderByDate: MessageOrder,
+        keyword: keyword,
+        isAdmin: isAdmin
+      },
+      responseType: 'blob',
+    });
+    return response;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export const getHistoryNoStatus = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory) => {
   try {
     const response = await axiosInstance.get('/history/noStatus', {
