@@ -309,37 +309,43 @@ export const getCountHistory = async (recipientUID, isAdmin) => {
   }
 };
 
-export const getHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin) => {
+export const getHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin, startDate, endDate) => {
   try {
-    const response = await axiosInstance.get('/history', {
-      params: {
-        userUID: userUID,
-        messageSender: MessageSender,
-        messageClassification: MessageCategory,
-        messageNumber: MessageNumber,
-        orderByDate: MessageOrder,
-        keyword: keyword,
-        isAdmin: isAdmin
-      }
-    });
+    const params = {
+      userUID: userUID,
+      messageSender: MessageSender,
+      messageClassification: MessageCategory,
+      messageNumber: MessageNumber,
+      orderByDate: MessageOrder,
+      keyword: keyword,
+      isAdmin: isAdmin
+    };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+
+    const response = await axiosInstance.get('/history', { params });
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
   }
 };
 
-export const exportHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin) => {
+export const exportHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin, startDate, endDate) => {
   try {
+    const params = {
+      userUID: userUID,
+      messageSender: MessageSender,
+      messageClassification: MessageCategory,
+      messageNumber: MessageNumber,
+      orderByDate: MessageOrder,
+      keyword: keyword,
+      isAdmin: isAdmin
+    };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+
     const response = await axiosInstance.get('/history/export', {
-      params: {
-        userUID: userUID,
-        messageSender: MessageSender,
-        messageClassification: MessageCategory,
-        messageNumber: MessageNumber,
-        orderByDate: MessageOrder,
-        keyword: keyword,
-        isAdmin: isAdmin
-      },
+      params,
       responseType: 'blob',
     });
     return response;
