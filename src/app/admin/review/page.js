@@ -829,7 +829,7 @@ export default function pageReview() {
                             <Row gutter={[24, 16]}>
                                 <Col xs={24} md={12}>
                                     <Form.Item
-                                        label="Tujuan Surat External"
+                                        label="Tujuan Surat Eksternal"
                                         name={"MessageRemarkSender"}
                                     >
                                         <input
@@ -839,6 +839,9 @@ export default function pageReview() {
                                             disabled
                                         />
                                     </Form.Item>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        <span className='text-red-500'>*</span> Apabila kolom diisi, wajib untuk menambahkan tag <b>[TUJUAN_EKSTERNAL]</b> pada bagian isi surat
+                                    </p>
                                 </Col>
                                 <Col xs={24} md={12}></Col>
                             </Row>

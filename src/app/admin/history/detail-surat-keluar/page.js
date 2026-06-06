@@ -231,6 +231,7 @@ export default function pageDetailSuratKeluar() {
                 if (data.MessageClassification == 1) {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
                 } else {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
@@ -486,7 +487,7 @@ export default function pageDetailSuratKeluar() {
                                 <Row gutter={[24, 16]}>
                                     <Col xs={24} md={12}>
                                         <Form.Item
-                                            label="Tujuan Surat External"
+                                            label="Tujuan Surat Eksternal"
                                             name={"MessageRemarkSender"}
                                         >
                                             <input

@@ -556,6 +556,7 @@ export default function pageDraft() {
                     const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
                     const selectedTemplate = optionTemplateName.find(option => option.value === data.TemplateUID)
 
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
                     FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
                     FormMessage.setFieldValue('ApproverObject', selectedApprover)
                     FormMessage.setFieldValue('CCObject', selectedCC)
@@ -841,7 +842,7 @@ export default function pageDraft() {
                             <Row gutter={[24, 16]}>
                                 <Col xs={24} md={12}>
                                     <Form.Item
-                                        label="Tujuan Surat External"
+                                        label="Tujuan Surat Eksternal"
                                         name={"MessageRemarkSender"}
                                     >
                                         <input
@@ -858,6 +859,9 @@ export default function pageDraft() {
                                             }}
                                         />
                                     </Form.Item>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Jika diisi, Wajib menambahkan tags [TUJUAN_EKSTERNAL] pada bagian isi surat
+                                    </p>
                                 </Col>
                                 <Col xs={24} md={12}></Col>
                             </Row>

@@ -119,16 +119,17 @@ export default function pageDetailSuratKeluar() {
         }
     }
 
-    const fetchTemplateName = async (typeName) => {
-        const response = await getTemplateNameSurat(typeName);
+    const fetchTemplateName = async (typeName, messageClassification) => {
+        const response = await getTemplateNameSurat(typeName, messageClassification);
         if (response) {
-            setOptionTemplate(response.data.map((item) => {
+            return response.data.map((item) => {
                 return {
                     label: item.TemplateName,
                     value: item.UID
                 }
-            }))
+            })
         }
+        return []
     }
 
     const fetchTemplate = async (uid) => {
@@ -377,12 +378,14 @@ export default function pageDetailSuratKeluar() {
                 if (data.MessageClassification == 1) {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
                 } else {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
                 }
 
                 setMessageClassification(data.MessageClassification)
+                
 
 
                 const responseUser = await getUsers()
@@ -394,9 +397,7 @@ export default function pageDetailSuratKeluar() {
                     }
                 })
 
-                const optionTemplateName = [
-                    { label: data.TemplateUID, value: data.TemplateUID }
-                ]
+                const optionTemplateName = await fetchTemplateName(data.TypeUID, data.MessageClassification)
 
 
                 const selectedReviewer = data.ReviewerUID?.split(",").map(uid =>
@@ -405,7 +406,7 @@ export default function pageDetailSuratKeluar() {
                 const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
                 const selectedCC = optionUser.filter(option => data.CCUID?.split(",").includes(option.value));
                 const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
-                const selectedTemplate = optionTemplateName.find(option => option.label === data.TemplateUID)
+                const selectedTemplate = optionTemplateName.find(option => option.value === data.TemplateUID)
 
                 FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
                 FormMessage.setFieldValue('ApproverObject', selectedApprover)
@@ -416,8 +417,6 @@ export default function pageDetailSuratKeluar() {
                 setTimeout(() => {
                     setCurrentDocument(data.MessageContent)
                 }, 300)
-
-                fetchTemplateName(data.TypeUID)
             }
 
             handleMessage()
@@ -726,7 +725,7 @@ export default function pageDetailSuratKeluar() {
                                 <Row gutter={[24, 16]}>
                                     <Col xs={24} md={12}>
                                         <Form.Item
-                                            label="Tujuan Surat External"
+                                            label="Tujuan Surat Eksternal"
                                             name={"MessageRemarkSender"}
                                         >
                                             <input
