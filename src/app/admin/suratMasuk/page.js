@@ -40,7 +40,7 @@ export default function pageSuratMasuk() {
     }
 
 
-    // uplaod section component
+    // upload section component
     const [loading, setLoading] = useState(false);
     const [fileList, setFileList] = useState([]);
     const [pdfUrl, setPdfUrl] = useState(null);
@@ -103,35 +103,87 @@ export default function pageSuratMasuk() {
 
     // Validate file type and size before uploading
     const beforeUpload = (file) => {
-        // Allowed file types
-        const allowedTypes = [
-            'application/pdf',             // PDF
-            'application/msword',          // Word (.doc)
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // Word (.docx)
-            'application/vnd.ms-excel',    // Excel (.xls)
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // Excel (.xlsx)
-            'image/jpeg',                  // JPEG images
-            'image/png'                    // PNG images
-        ];
-
-        // Check if file type is allowed
-        const isTypeValid = allowedTypes.includes(file.type);
-        if (!isTypeValid) {
-            message.error('Hanya dapat mengupload file PDF, Word, Excel, atau gambar (JPEG/PNG)');
-            return Upload.LIST_IGNORE; // Ignore files with unsupported types
+        const isPDF = file.type === 'application/pdf';
+        if (!isPDF) {
+            message.error('Hanya dapat mengupload file PDF');
+            return Upload.LIST_IGNORE;
         }
 
-        // Size check (in MB)
         const isSizeValid = file.size / 1024 / 1024 < 10; // Max size is 10MB
         if (!isSizeValid) {
             message.error('Ukuran file maksimal adalah 10MB');
-            return Upload.LIST_IGNORE; // Ignore files larger than 10MB
+            return Upload.LIST_IGNORE;
+        }
+
+        return isPDF && isSizeValid;
+    };
+
+    // End of component upload
+
+    // Lampiran section
+    const [lampiranList, setLampiranList] = useState([]);
+
+    const handleUploadLampiran = async () => {
+        if (lampiranList.length === 0) {
+            return null;
+        }
+
+        try {
+            const uploadPromises = lampiranList.map(async (file) => {
+                const formData = new FormData();
+                formData.append('file', file.originFileObj);
+
+                const response = await axios.post(`${process.env.NEXT_PUBLIC_BASE_URL}/mediaS3`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+
+                return response.data?.data?.UID;
+            });
+
+            const uids = await Promise.all(uploadPromises);
+            return uids.join(',');
+        } catch (error) {
+            message.error('Gagal mengupload lampiran');
+            throw error;
+        }
+    };
+
+    const handleChangeLampiran = ({ fileList: newFileList }) => {
+        if (newFileList.length > 3) {
+            message.warning('Maksimal 3 file yang dapat diupload');
+            setLampiranList(newFileList.slice(0, 3));
+        } else {
+            setLampiranList(newFileList);
+        }
+    };
+
+    const beforeUploadLampiran = (file) => {
+        const allowedTypes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'image/jpeg',
+            'image/png'
+        ];
+
+        const isTypeValid = allowedTypes.includes(file.type);
+        if (!isTypeValid) {
+            message.error('Hanya dapat mengupload file PDF, Word, Excel, atau gambar (JPEG/PNG)');
+            return Upload.LIST_IGNORE;
+        }
+
+        const isSizeValid = file.size / 1024 / 1024 < 10;
+        if (!isSizeValid) {
+            message.error('Ukuran file maksimal adalah 10MB');
+            return Upload.LIST_IGNORE;
         }
 
         return isTypeValid && isSizeValid;
     };
 
-    // End of component upload
+    // End of lampiran section
 
 
 
@@ -198,6 +250,12 @@ export default function pageSuratMasuk() {
             // Set the media UID in the form data
             data.ListMedia = media.data.UID;
 
+            // Upload lampiran jika ada
+            const lampiranUIDs = await handleUploadLampiran();
+            if (lampiranUIDs) {
+                data.MessageContentMediaUID = lampiranUIDs;
+            }
+
             // Then create the message
             await createMessage(data);
 
@@ -208,6 +266,7 @@ export default function pageSuratMasuk() {
 
             // Reset form state
             setFileList([]);
+            setLampiranList([]);
             setPdfUrl(null);
             fetchCount(role, recipientUID, 0);
             FormMessage.resetFields();
@@ -444,6 +503,31 @@ export default function pageSuratMasuk() {
                                         accept=".pdf" // Only accept PDF files
                                     >
                                         <Button icon={<MdUpload />}>Select File</Button>
+                                    </Upload>
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} md={12}></Col>
+                        </Row>
+
+                        {/* Lampiran */}
+                        <Row gutter={[24, 16]}>
+                            <Col xs={24} md={12}>
+                                <Form.Item
+                                    label={"Lampiran"}
+                                    name={"ListMediaLampiran"}
+                                >
+                                    <Upload
+                                        fileList={lampiranList}
+                                        onChange={handleChangeLampiran}
+                                        beforeUpload={beforeUploadLampiran}
+                                        maxCount={3}
+                                        multiple={true}
+                                        accept=".pdf, .doc, .docx, .xls, .xlsx, .jpg, .jpeg, .png"
+                                        onRemove={(file) => {
+                                            setLampiranList((prev) => prev.filter((item) => item.uid !== file.uid));
+                                        }}
+                                    >
+                                        <Button icon={<MdUpload />}>Pilih File (Maks. 3)</Button>
                                     </Upload>
                                 </Form.Item>
                             </Col>

@@ -14,7 +14,9 @@ export default function RichEditComponent({
   triggerUpdate,
   onSaveComplete,
   messageClassification,
-  isReviewerEnabled
+  isReviewerEnabled,
+  isMessageRemark = false,
+  setLoadingSubmit,
 }) {
   const richEditRef = useRef(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
@@ -106,6 +108,11 @@ export default function RichEditComponent({
           } else {
             return false
           }
+
+          if (isMessageRemark) {
+            requiredTags.push("[TUJUAN_EKSTERNAL]")
+          }
+
           return requiredTags.every(tag => inputString.includes(tag));
         }
 
@@ -115,6 +122,9 @@ export default function RichEditComponent({
             errorMessage = "Tolong lengkapi FLAG [NO_SURAT] dan [TGL_SURAT]"
           } else if (messageClassification == 2) {
             errorMessage = "Tolong lengkapi FLAG [NO_SURAT], [TTD] dan [TGL_SURAT]"
+          }
+          if (isMessageRemark) {
+            errorMessage += " dan [TUJUAN_EKSTERNAL]"
           }
           message.error(errorMessage)
         }
@@ -126,6 +136,7 @@ export default function RichEditComponent({
           });
         } else {
           getErrorMessage(messageClassification)
+          setLoadingSubmit(false)
         }
       } catch (error) {
         console.log(error)
@@ -162,6 +173,9 @@ export default function RichEditComponent({
           } else {
             return false
           }
+          if (isMessageRemark) {
+            requiredTags.push("[TUJUAN_EKSTERNAL]")
+          }
           return requiredTags.every(tag => inputString.includes(tag));
         }
 
@@ -171,6 +185,9 @@ export default function RichEditComponent({
             errorMessage = "Tolong lengkapi FLAG [NO_SURAT] dan [TGL_SURAT]"
           } else if (messageClassification == 2) {
             errorMessage = "Tolong lengkapi FLAG [NO_SURAT], [TTD] dan [TGL_SURAT]"
+          }
+          if (isMessageRemark) {
+            errorMessage += " dan [TUJUAN_EKSTERNAL]"
           }
           message.error(errorMessage)
         }
@@ -182,6 +199,7 @@ export default function RichEditComponent({
           });
         } else {
           getErrorMessage(messageClassification)
+          setLoadingSubmit(false)
         }
       } catch (error) {
         console.log(error)

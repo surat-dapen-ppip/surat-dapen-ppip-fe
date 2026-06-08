@@ -2,7 +2,7 @@
 "use client"
 
 import { Button, Form, Input, message, Modal, Select, Spin, Row, Col } from 'antd';
-import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner } from 'react-icons/md';
+import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useState, useRef } from 'react';
 import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -17,10 +17,13 @@ import moment from 'moment';
 import { createMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
 import { createMessageRejection } from '@/services/messageRejection';
-import { debounce } from 'lodash';
+import { debounce, set } from 'lodash';
 import RichEditorSignatureMemoV2 from '@/components/richEditorSignatureMemoV2';
 import RichEditorReviewV2 from '@/components/richEditorReviewV2';
 import RichEditorSignatureV2 from '@/components/richEditorSignatureV2';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 export default function pageReview() {
     const router = useRouter()
@@ -30,6 +33,7 @@ export default function pageReview() {
     const [isLoadingData, setIsLoadingData] = useState(true)
 
     const [currentDocument, setCurrentDocument] = useState("")
+    const [currentMessageRemark, setCurrentMessageRemark] = useState(false)
     const [currentMessageStatus, setCurrentMessageStatus] = useState()
     const [messageClassification, setMessageClassification] = useState()
     const [messageNumberDocument, setMessageNumberDocument] = useState("")
@@ -44,6 +48,7 @@ export default function pageReview() {
     const [isModalBackOpen, setIsModalBackOpen] = useState(false)
     const [isModalRevisionOpen, setIsModalRevisionOpen] = useState(false)
     const [isModalRejectOpen, setIsModalRejectOpen] = useState(false)
+
 
     const handleBack = () => { setIsModalBackOpen(true) }
     const handleApprove = async () => {
@@ -62,7 +67,17 @@ export default function pageReview() {
         }, 5000)
 
     }
-    const handleRevision = () => { setIsModalRevisionOpen(true) }
+    const handleRevision = () => {
+        if (loadingSubmit) {
+            return
+        }
+        setLoadingSubmit(true);
+        triggerEditorReviewUpdate();
+        setTimeout(() => {
+            setIsModalRevisionOpen(true)
+            setLoadingSubmit(false);
+        }, 5000)
+    }
     const handleReject = () => { setIsModalRejectOpen(true) }
     const handleCancelRevision = () => { setIsModalRevisionOpen(false) }
     const handleCancelReject = () => { setIsModalRejectOpen(false) }
@@ -224,7 +239,6 @@ export default function pageReview() {
     const handleOnUpdateDocument = (content) => {
         try {
             setCurrentDocument(content)
-
         } catch (error) {
             message.error("Proses Gagal")
         }
@@ -256,6 +270,7 @@ export default function pageReview() {
             data.MessageUID = UID
             data.FromUserUID = recipientUID
             data.FromUserName = name;
+            data.Document = getCurrentDocument()
 
             await createMessageRevision(data)
             message.success("Proses Berhasil")
@@ -307,6 +322,13 @@ export default function pageReview() {
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const handleDownload = async (mediaUID, fileName) => {
         if (typeof window !== 'undefined') {
@@ -406,6 +428,7 @@ export default function pageReview() {
                         return
                     }
 
+                    setCurrentMessageRemark(data.MessageRemarkSender)
                     setCurrentDocument(data.MessageContent)
                     setCurrentMessageStatus(data.MessageStatus)
                     setMessageClassification(data.MessageClassification)
@@ -430,6 +453,7 @@ export default function pageReview() {
                     FormMessage.setFieldValue('NatureUID', data.NatureUID)
                     FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
                     FormMessage.setFieldValue('Information', data.Information)
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
 
                     if (data.MessageClassification == 1) {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
@@ -487,6 +511,10 @@ export default function pageReview() {
 
     const getMessageNumberDocument = () => {
         return messageNumberDocument
+    }
+
+    const getCurrentMessageRemark = () => {
+        return currentMessageRemark
     }
 
     const editorRefSK = useRef(null);
@@ -797,6 +825,28 @@ export default function pageReview() {
                             <Col xs={24} md={12}></Col>
                         </Row>
 
+                        {messageClassification == 1 && (
+                            <Row gutter={[24, 16]}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        label="Tujuan Surat Eksternal"
+                                        name={"MessageRemarkSender"}
+                                    >
+                                        <input
+                                            type="text"
+                                            placeholder="Input Judul Surat Masuk"
+                                            className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                            disabled
+                                        />
+                                    </Form.Item>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        <span className='text-red-500'>*</span> Apabila kolom diisi, wajib untuk menambahkan tag <b>[TUJUAN_EKSTERNAL]</b> pada bagian isi surat
+                                    </p>
+                                </Col>
+                                <Col xs={24} md={12}></Col>
+                            </Row>
+                        )}
+
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
                                 <Form.Item
@@ -864,17 +914,27 @@ export default function pageReview() {
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <Button
-                                                    type="primary"
-                                                    icon={<MdDownload />}
-                                                    onClick={() => handleDownload(media.UID, media.Name)}
-                                                    loading={downloadingStates[media.UID]}
-                                                    disabled={downloadingStates[media.UID]}
-                                                    size="small"
-                                                    className="flex-shrink-0"
-                                                >
-                                                    {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
-                                                </Button>
+                                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                                    {isPdfFile(media.Name) && (
+                                                        <Button
+                                                            icon={<MdVisibility />}
+                                                            onClick={() => handlePreview(media.UID, media.Name)}
+                                                            size="small"
+                                                        >
+                                                            Preview
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<MdDownload />}
+                                                        onClick={() => handleDownload(media.UID, media.Name)}
+                                                        loading={downloadingStates[media.UID]}
+                                                        disabled={downloadingStates[media.UID]}
+                                                        size="small"
+                                                    >
+                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                    </Button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -892,6 +952,7 @@ export default function pageReview() {
                             ref={editorRefReview}
                             getCurrentDocument={getCurrentDocument}
                             getMessageClassification={getMessageClassification}
+                            getCurrentMessageRemark={getCurrentMessageRemark}
                             onSaveComplete={handleOnReviewerSaveComplete}
                             onUpdateDocument={handleOnUpdateDocument}
                             isOpen={true}
@@ -1036,6 +1097,7 @@ export default function pageReview() {
                                         ref={editorRefSK}
                                         getCurrentDocument={getCurrentDocument}
                                         getMessageNumberDocument={getMessageNumberDocument}
+                                        getCurrentMessageRemark={getCurrentMessageRemark}
                                         onSaveComplete={handleOnSaveComplete}
                                         isOpen={isModalApproveSuratKeluarOpen}
                                     />
@@ -1114,6 +1176,13 @@ export default function pageReview() {
                     </div>
                 </Modal>
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import {Button, Form, message, Modal, Select, Spin, Table, Tabs, Row, Col} from 'antd';
-import {MdClear, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn } from 'react-icons/md';
+import { Button, Form, message, Modal, Select, Spin, Table, Tabs, Row, Col } from 'antd';
+import { MdClear, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -21,7 +21,10 @@ import { createMessageEvent, getMessageEvents } from '@/services/messageEvent';
 import CryptoJS from 'crypto-js';
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
 // import PdfViewer from '@/components/pdfViewer';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 const RichEditReadOnlyComponent = dynamic(() => import('@/components/richEditReadOnly'), { ssr: false });
 
@@ -33,13 +36,14 @@ export default function pageDetailSuratKeluar() {
     const [dataMessage, setDataMessage] = useState()
     const [dataMessageEvent, setDataMessageEvent] = useState([])
     const [dataUser, setDataUser] = useState([])
+    const [messageClassification, setMessageClassification] = useState(0)
 
     const [isModalRejectOpen, setIsModalRejectOpen] = useState(false)
     const [isModalDispositionOpen, setIsModalDispositionOpen] = useState(false)
     const [isModalForwardOpen, setIsModalForwardOpen] = useState(false)
     const [isModalSubmitOpen, setIsModalSubmitOpen] = useState(false)
 
-    const {fetchCount } = useLayoutContext();
+    const { fetchCount } = useLayoutContext();
 
     const [optionType, setOptionType] = useState([])
     const [optionTemplate, setOptionTemplate] = useState([])
@@ -65,6 +69,13 @@ export default function pageDetailSuratKeluar() {
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const onStart = (_event, uiData) => {
         const { clientWidth, clientHeight } = window.document.documentElement;
@@ -108,16 +119,17 @@ export default function pageDetailSuratKeluar() {
         }
     }
 
-    const fetchTemplateName = async (typeName) => {
-        const response = await getTemplateNameSurat(typeName);
+    const fetchTemplateName = async (typeName, messageClassification) => {
+        const response = await getTemplateNameSurat(typeName, messageClassification);
         if (response) {
-            setOptionTemplate(response.data.map((item) => {
+            return response.data.map((item) => {
                 return {
                     label: item.TemplateName,
                     value: item.UID
                 }
-            }))
+            })
         }
+        return []
     }
 
     const fetchTemplate = async (uid) => {
@@ -167,7 +179,7 @@ export default function pageDetailSuratKeluar() {
     const handleDownload = async (mediaUID, fileName) => {
         try {
             setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
-            
+
             const ext = fileName.split('.').pop()?.toLowerCase();
 
             if (ext === 'pdf') {
@@ -205,7 +217,7 @@ export default function pageDetailSuratKeluar() {
                     const boxWidth = 200;
                     const boxHeight = watermarkText.length * (textSize + 5) + borderPadding * 2;
                     const boxX = 100;
-                    const boxY = height - 100;
+                    const boxY = height - boxHeight - 100;
 
                     page.drawRectangle({
                         x: boxX,
@@ -220,7 +232,7 @@ export default function pageDetailSuratKeluar() {
 
                     page.drawText("CONFIDENTAL DOCUMENT", {
                         x: boxX + borderPadding,
-                        y: boxY + boxHeight - borderPadding - textSize * (0 + 1),
+                        y: boxY + boxHeight - borderPadding - textSize,
                         size: 12,
                         font: customFont,
                         color: rgb(1, 0, 0),
@@ -262,7 +274,7 @@ export default function pageDetailSuratKeluar() {
                 const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
                     responseType: 'blob',
                 });
-                
+
                 const url = window.URL.createObjectURL(new Blob([response.data]));
                 const link = document.createElement('a');
                 link.href = url;
@@ -271,7 +283,7 @@ export default function pageDetailSuratKeluar() {
                 link.click();
                 link.parentNode.removeChild(link);
                 window.URL.revokeObjectURL(url);
-                
+
                 message.success(`File ${fileName} berhasil didownload`);
             }
         } catch (error) {
@@ -291,7 +303,7 @@ export default function pageDetailSuratKeluar() {
         try {
             // Split UIDs by comma
             const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
-            
+
             // Fetch all media details
             const mediaPromises = mediaUIDs.map(async (uid) => {
                 try {
@@ -366,10 +378,14 @@ export default function pageDetailSuratKeluar() {
                 if (data.MessageClassification == 1) {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
                 } else {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
                 }
+
+                setMessageClassification(data.MessageClassification)
+                
 
 
                 const responseUser = await getUsers()
@@ -381,9 +397,7 @@ export default function pageDetailSuratKeluar() {
                     }
                 })
 
-                const optionTemplateName = [
-                    { label: data.TemplateUID, value: data.TemplateUID }
-                ]
+                const optionTemplateName = await fetchTemplateName(data.TypeUID, data.MessageClassification)
 
 
                 const selectedReviewer = data.ReviewerUID?.split(",").map(uid =>
@@ -392,7 +406,7 @@ export default function pageDetailSuratKeluar() {
                 const selectedApprover = optionUser.find(option => option.value === data.ApproverUID);
                 const selectedCC = optionUser.filter(option => data.CCUID?.split(",").includes(option.value));
                 const selectedRecipient = optionUser.filter(option => data.RecipientUID?.split(",").includes(option.value));
-                const selectedTemplate = optionTemplateName.find(option => option.label === data.TemplateUID)
+                const selectedTemplate = optionTemplateName.find(option => option.value === data.TemplateUID)
 
                 FormMessage.setFieldValue('ReviewerObject', selectedReviewer)
                 FormMessage.setFieldValue('ApproverObject', selectedApprover)
@@ -403,8 +417,6 @@ export default function pageDetailSuratKeluar() {
                 setTimeout(() => {
                     setCurrentDocument(data.MessageContent)
                 }, 300)
-
-                fetchTemplateName(data.TypeUID)
             }
 
             handleMessage()
@@ -709,6 +721,25 @@ export default function pageDetailSuratKeluar() {
                                 <Col xs={24} md={12}></Col>
                             </Row>
 
+                            {messageClassification == 1 && (
+                                <Row gutter={[24, 16]}>
+                                    <Col xs={24} md={12}>
+                                        <Form.Item
+                                            label="Tujuan Surat Eksternal"
+                                            name={"MessageRemarkSender"}
+                                        >
+                                            <input
+                                                type="text"
+                                                placeholder="Input Judul Surat Masuk"
+                                                className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                                disabled
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col xs={24} md={12}></Col>
+                                </Row>
+                            )}
+
                             <Row gutter={[24, 16]}>
                                 <Col xs={24} md={12}>
                                     <Form.Item
@@ -752,7 +783,7 @@ export default function pageDetailSuratKeluar() {
                                 <Col xs={24} md={12}></Col>
                             </Row>
                         </Form>
-                        
+
                         {/* Lampiran Section */}
                         <Row gutter={[24, 16]} className="mt-5">
                             <Col xs={24} md={12}>
@@ -761,8 +792,8 @@ export default function pageDetailSuratKeluar() {
                                     {mediaList.length > 0 ? (
                                         <div className="space-y-2">
                                             {mediaList.map((media, index) => (
-                                                <div 
-                                                    key={media.UID} 
+                                                <div
+                                                    key={media.UID}
                                                     className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
                                                 >
                                                     <div className="flex items-center space-x-3 flex-1">
@@ -776,17 +807,27 @@ export default function pageDetailSuratKeluar() {
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    <Button
-                                                        type="primary"
-                                                        icon={<MdDownload />}
-                                                        onClick={() => handleDownload(media.UID, media.Name)}
-                                                        loading={downloadingStates[media.UID]}
-                                                        disabled={downloadingStates[media.UID]}
-                                                        size="small"
-                                                        className="flex-shrink-0"
-                                                    >
-                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
-                                                    </Button>
+                                                    <div className="flex items-center space-x-2 flex-shrink-0">
+                                                        {isPdfFile(media.Name) && (
+                                                            <Button
+                                                                icon={<MdVisibility />}
+                                                                onClick={() => handlePreview(media.UID, media.Name)}
+                                                                size="small"
+                                                            >
+                                                                Preview
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            type="primary"
+                                                            icon={<MdDownload />}
+                                                            onClick={() => handleDownload(media.UID, media.Name)}
+                                                            loading={downloadingStates[media.UID]}
+                                                            disabled={downloadingStates[media.UID]}
+                                                            size="small"
+                                                        >
+                                                            {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -857,7 +898,7 @@ export default function pageDetailSuratKeluar() {
         {
             key: '3',
             label: <h2 className="text-lg font-semibold text-gray-700">History</h2>,
-            children:             <div className="p-6 bg-white shadow-sm rounded mt-3 w-[90%]">
+            children: <div className="p-6 bg-white shadow-sm rounded mt-3 w-[90%]">
                 <Table
                     dataSource={dataMessageEvent}
                     columns={[
@@ -1258,6 +1299,13 @@ export default function pageDetailSuratKeluar() {
                     </div>
                 </Modal>
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

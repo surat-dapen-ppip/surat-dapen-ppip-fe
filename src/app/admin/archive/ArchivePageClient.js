@@ -671,7 +671,7 @@ export default function ArchivePageClient() {
                 const boxHeight = watermarkText.length * (textSize + 5) + borderPadding * 2;
 
                 const boxX = 100;
-                const boxY = height - 100;
+                const boxY = height - boxHeight - 100;
 
                 // Draw the border box
                 page.drawRectangle({
@@ -687,7 +687,7 @@ export default function ArchivePageClient() {
 
                 page.drawText("CONFIDENTAL DOCUMENT", {
                     x: boxX + borderPadding,
-                    y: boxY + boxHeight - borderPadding - textSize * (0 + 1),
+                    y: boxY + boxHeight - borderPadding - textSize,
                     size: 12,
                     font: customFont,
                     color: rgb(1, 0, 0),
@@ -1365,8 +1365,8 @@ export default function ArchivePageClient() {
             {/* Edit Modal */}
             {showEditModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg px-6 w-full max-w-5xl shadow-xl overflow-hidden max-h-[90vh]">
-                        <div className="flex flex-col h-full overflow-y-auto gap-6">
+                    <div className="bg-white rounded-lg px-6 w-full max-w-5xl shadow-xl overflow-y-auto max-h-[90vh]">
+                        <div className="flex flex-col gap-6">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-lg font-semibold pt-6 sticky top-0 bg-white" style={{ zIndex: 9999999 }}>
                                     {editItem?.type === 'folder' ? 'Edit Folder' : 'Edit Dokumen'}

@@ -2,7 +2,7 @@
 "use client"
 
 import { Button, Form, message, Select, Table, Tabs, Row, Col } from 'antd';
-import { MdDownload, MdInsertDriveFile } from 'react-icons/md';
+import { MdDownload, MdInsertDriveFile, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -16,6 +16,9 @@ import axios from 'axios';
 import moment from 'moment';
 import { getMediaByUid } from '@/services/media';
 import { getMessageEvents } from '@/services/messageEvent';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 const RichEditReadOnlyComponent = dynamic(() => import('@/components/richEditReadOnly'), { ssr: false });
 
@@ -29,6 +32,7 @@ export default function pageDetailSuratKeluar() {
     const [FormMessage] = Form.useForm()
 
     const [currentDocument, setCurrentDocument] = useState("")
+    const [messageClassification, setMessageClassification] = useState(0)
 
     const [optionType, setOptionType] = useState([])
     const [optionTemplate, setOptionTemplate] = useState([])
@@ -38,6 +42,13 @@ export default function pageDetailSuratKeluar() {
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const fetchMessage = async (uid) => {
         const response = await getMessageByUid(uid)
@@ -214,9 +225,13 @@ export default function pageDetailSuratKeluar() {
                 FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
                 FormMessage.setFieldValue('Information', data.Information)
 
+
+                setMessageClassification(data.MessageClassification)
+
                 if (data.MessageClassification == 1) {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
                 } else {
                     FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                     FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
@@ -468,6 +483,25 @@ export default function pageDetailSuratKeluar() {
                                 <Col xs={24} md={12}></Col>
                             </Row>
 
+                            {messageClassification == 1 && (
+                                <Row gutter={[24, 16]}>
+                                    <Col xs={24} md={12}>
+                                        <Form.Item
+                                            label="Tujuan Surat Eksternal"
+                                            name={"MessageRemarkSender"}
+                                        >
+                                            <input
+                                                type="text"
+                                                placeholder="Input Judul Surat Masuk"
+                                                className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                                disabled
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col xs={24} md={12}></Col>
+                                </Row>
+                            )}
+
                             <Row gutter={[24, 16]}>
                                 <Col xs={24} md={12}>
                                     <Form.Item
@@ -536,17 +570,27 @@ export default function pageDetailSuratKeluar() {
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    <Button
-                                                        type="primary"
-                                                        icon={<MdDownload />}
-                                                        onClick={() => handleDownload(media.UID, media.Name)}
-                                                        loading={downloadingStates[media.UID]}
-                                                        disabled={downloadingStates[media.UID]}
-                                                        size="small"
-                                                        className="flex-shrink-0"
-                                                    >
-                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
-                                                    </Button>
+                                                    <div className="flex items-center space-x-2 flex-shrink-0">
+                                                        {isPdfFile(media.Name) && (
+                                                            <Button
+                                                                icon={<MdVisibility />}
+                                                                onClick={() => handlePreview(media.UID, media.Name)}
+                                                                size="small"
+                                                            >
+                                                                Preview
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            type="primary"
+                                                            icon={<MdDownload />}
+                                                            onClick={() => handleDownload(media.UID, media.Name)}
+                                                            loading={downloadingStates[media.UID]}
+                                                            disabled={downloadingStates[media.UID]}
+                                                            size="small"
+                                                        >
+                                                            {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -655,6 +699,13 @@ export default function pageDetailSuratKeluar() {
     return (
         <main>
             <Tabs defaultActiveKey="1" items={tabsContent} size="lg" />
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

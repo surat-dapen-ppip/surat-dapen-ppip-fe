@@ -207,13 +207,17 @@ export const countMessagesOnlyUser = async (status, userUID) => {
 };
 
 
-export const getMessagesBothUser = async (status, userUID, statusSecondary) => {
+export const getMessagesBothUser = async (status, userUID, statusSecondary, category, title, startDate, endDate) => {
   try {
     const response = await axiosInstance.get('/messageMaster/bothUser', {
       params: {
         status: status,
         userUID: userUID,
-        statusSecondary: statusSecondary
+        statusSecondary: statusSecondary,
+        category: category,
+        title: title,
+        startDate: startDate,
+        endDate: endDate,
       }
     });
     return response.data;
@@ -305,24 +309,51 @@ export const getCountHistory = async (recipientUID, isAdmin) => {
   }
 };
 
-export const getHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin) => {
+export const getHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin, startDate, endDate) => {
   try {
-    const response = await axiosInstance.get('/history', {
-      params: {
-        userUID: userUID,
-        messageSender: MessageSender,
-        messageClassification: MessageCategory,
-        messageNumber: MessageNumber,
-        orderByDate: MessageOrder,
-        keyword: keyword,
-        isAdmin: isAdmin
-      }
-    });
+    const params = {
+      userUID: userUID,
+      messageSender: MessageSender,
+      messageClassification: MessageCategory,
+      messageNumber: MessageNumber,
+      orderByDate: MessageOrder,
+      keyword: keyword,
+      isAdmin: isAdmin
+    };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+
+    const response = await axiosInstance.get('/history', { params });
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
   }
 };
+
+export const exportHistory = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, isAdmin, startDate, endDate) => {
+  try {
+    const params = {
+      userUID: userUID,
+      messageSender: MessageSender,
+      messageClassification: MessageCategory,
+      messageNumber: MessageNumber,
+      orderByDate: MessageOrder,
+      keyword: keyword,
+      isAdmin: isAdmin
+    };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+
+    const response = await axiosInstance.get('/history/export', {
+      params,
+      responseType: 'blob',
+    });
+    return response;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export const getHistoryNoStatus = async (userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory) => {
   try {
     const response = await axiosInstance.get('/history/noStatus', {

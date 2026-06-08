@@ -1,11 +1,17 @@
 "use client"
 import { useLayoutContext } from "@/hooks/useLayoutContext";
 import { countMessagesBothUser, countMessagesByUser, countMessagesForApprover, countMessagesForDrafterCC, countMessagesForReviewer, countMessagesForUser, countMessagesOnlyUser, getMessages, getMessagesBothUser, getMessagesByUser, getMessagesForApprover, getMessagesForDrafterCC, getMessagesForReviewer, getMessagesForUser, getMessagesOnlyUser } from "@/services/message";
-import { Table, Tabs } from "antd";
+import { Table, Tabs, Input, Select, DatePicker, Space, Button } from "antd";
+import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween';
+import { filter } from "lodash";
+
+dayjs.extend(isBetween);
 import moment from "moment";
 /* eslint-disable react-hooks/rules-of-hooks */
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { MdSearch } from "react-icons/md";
 
 const ContentTabs = ({
     dataSource,
@@ -111,6 +117,11 @@ export default function pageDaftarSurat() {
     const [dataRevised, setDataRevised] = useState([])
     const [dataRejected, setDataRejected] = useState([])
 
+    // Filter States for Approved Tab
+    const [filterApprovedCategory, setFilterApprovedCategory] = useState(null);
+    const [filterApprovedTitle, setFilterApprovedTitle] = useState("");
+    const [filterApprovedDate, setFilterApprovedDate] = useState(null);
+
 
     const fetchCountDaftar = async (recipientUID) => {
         const rDraft = await countMessagesOnlyUser(3, recipientUID)
@@ -151,7 +162,22 @@ export default function pageDaftarSurat() {
             const response = await getMessagesForApprover(selectedKeyTabs, userUID)
             setDataNeedApproval(response.data)
         } else if (KeyTabs == '2') {
-            const response = await getMessagesBothUser(selectedKeyTabs, userUID, 1)
+            let startDate = null
+            let endDate = null
+            if (filterApprovedDate && filterApprovedDate.length === 2) {
+                startDate = filterApprovedDate[0].startOf('day').toISOString()
+                endDate = filterApprovedDate[1].endOf('day').toISOString()
+            }
+
+            const response = await getMessagesBothUser(
+                selectedKeyTabs, 
+                userUID, 
+                1, 
+                filterApprovedCategory, 
+                filterApprovedTitle, 
+                startDate,
+                endDate,
+            )
             setDataApproved(response.data)
         } else if (KeyTabs == '5') {
             const response = await getMessagesOnlyUser(selectedKeyTabs, userUID)
@@ -276,6 +302,38 @@ export default function pageDaftarSurat() {
             ),
             children: (
                 <div>
+                    <div className="mb-4">
+                        <Space wrap>
+                            <Select
+                                placeholder="Jenis Surat"
+                                style={{ width: 150 }}
+                                allowClear
+                                onChange={(value) => setFilterApprovedCategory(value)}
+                                options={[
+                                    { value: 1, label: 'Surat Keluar' },
+                                    { value: 2, label: 'Memo Dinas' },
+                                ]}
+                            />
+                            <Input
+                                placeholder="Judul Surat"
+                                style={{ width: 200 }}
+                                allowClear
+                                onChange={(e) => setFilterApprovedTitle(e.target.value)}
+                            />
+                            <DatePicker.RangePicker
+                                onChange={(dates) => setFilterApprovedDate(dates)}
+                            />
+                            <Button
+                                type="primary"
+                                onClick={() => {
+                                    const userUID = window.localStorage.getItem('UserUID')
+                                    fetchMessage("2", userUID)
+                                }}
+                            >
+                                <MdSearch/>
+                            </Button>
+                        </Space>
+                    </div>
                     <ContentTabs
                         dataSource={dataApproved}
                     />

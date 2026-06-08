@@ -2,7 +2,7 @@
 "use client"
 
 import { Button, Col, DatePicker, Form, message, Modal, Popconfirm, Row, Select, Space, Spin, Upload } from 'antd';
-import { MdArrowBack, MdCheck, MdClear, MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn, MdUpload } from 'react-icons/md';
+import { MdArrowBack, MdCheck, MdClear, MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn, MdUpload, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -19,6 +19,9 @@ import { GetBaseTemplate } from '@/utils/messageUtil';
 import { getMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
 import { debounce } from 'lodash';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 const RichEditComponent = dynamic(() => import('@/components/richEditor'), { ssr: false });
 
@@ -29,6 +32,7 @@ export default function pageDraft() {
     const [dataMessage, setDataMessage] = useState()
     const [dataMessageRevision, setDataMessageRevision] = useState([])
     const [isLoadingData, setIsLoadingData] = useState(true)
+    const [isMessageRemark, setIsMessageRemark] = useState(false)
 
     const { role, recipientUID, name, fetchCount } = useLayoutContext();
     const [FormMessage] = Form.useForm()
@@ -261,7 +265,6 @@ export default function pageDraft() {
         } finally {
             setLoadingSubmit(false); // Stop loading spinner
         }
-        setTriggerSave(!triggerSave);
     }, 300)
 
     const [loadingSubmit, setLoadingSubmit] = useState(false);
@@ -375,14 +378,14 @@ export default function pageDraft() {
         const isAvailable = await handleCheckEventAvailability(data.EventNumber, data.EventNumberSub)
 
         let eventNumber = ""
-        if(dataMessage?.MessageClassification == 1){
+        if (dataMessage?.MessageClassification == 1) {
             eventNumber = dataMessage?.EventNumberKeluar
         }
-        else if(dataMessage?.MessageClassification == 2){
+        else if (dataMessage?.MessageClassification == 2) {
             eventNumber = dataMessage?.EventNumberMemo
         }
 
-        if(eventNumber == ""){
+        if (eventNumber == "") {
             message.warning("Gagal melakukan pengecekan nomor surat")
         }
 
@@ -411,6 +414,13 @@ export default function pageDraft() {
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
     const [removedMediaUIDs, setRemovedMediaUIDs] = useState([])
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const handleRemoveMedia = (mediaUID) => {
         // Add to removed list
@@ -423,11 +433,11 @@ export default function pageDraft() {
     const handleDownload = async (mediaUID, fileName) => {
         try {
             setDownloadingStates(prev => ({ ...prev, [mediaUID]: true }));
-            
+
             const response = await axios.get(`${API_URL}/mediaS3/${mediaUID}`, {
                 responseType: 'blob',
             });
-            
+
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -436,7 +446,7 @@ export default function pageDraft() {
             link.click();
             link.parentNode.removeChild(link);
             window.URL.revokeObjectURL(url);
-            
+
             message.success(`File ${fileName} berhasil didownload`);
         } catch (error) {
             console.error('Error downloading file:', error);
@@ -455,7 +465,7 @@ export default function pageDraft() {
         try {
             // Split UIDs by comma
             const mediaUIDs = dataMessage.ListMedia.split(',').filter(uid => uid.trim() !== '');
-            
+
             // Fetch all media details
             const mediaPromises = mediaUIDs.map(async (uid) => {
                 try {
@@ -526,6 +536,7 @@ export default function pageDraft() {
                     if (data.MessageClassification == 1) {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
                         FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubKeluar)
+                        FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
                     } else {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                         FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
@@ -567,7 +578,7 @@ export default function pageDraft() {
                     fetchTemplateName(data.TypeUID, data.MessageClassification)
 
                     fetchMessageRevision(uid)
-                    
+
                     setIsLoadingData(false)
                 } catch (error) {
                     console.error("Error loading message:", error)
@@ -677,11 +688,16 @@ export default function pageDraft() {
                                         rules={[{ required: true, message: 'Tolong masukan Jenis Surat' }]}
                                     >
                                         <Select
-                                            options={optionType}
+                                            showSearch
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
+                                            options={optionType.sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3 w-full single"
                                             onSelect={(value, _) => {
-                                                fetchTemplateName(value, messageClassification);
+                                                fetchTemplateName(value, data.messageClassification);
                                             }}
+                                            placeholder="Pilih Jenis Surat"
                                         />
                                     </Form.Item>
 
@@ -798,6 +814,35 @@ export default function pageDraft() {
                                     />
                                 </Form.Item>
 
+                                {messageClassification == 1 && (
+                                    <Row gutter={[24, 16]}>
+                                        <Col xs={24} md={12}>
+                                            <Form.Item
+                                                label="Tujuan Surat Eksternal"
+                                                name={"MessageRemarkSender"}
+                                            >
+                                                <input
+                                                    type="text"
+                                                    placeholder="Input Judul Surat Masuk"
+                                                    className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                                    onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        if (value.trim() !== "") {
+                                                            setIsMessageRemark(true);
+                                                        } else {
+                                                            setIsMessageRemark(false);
+                                                        }
+                                                    }}
+                                                />
+                                            </Form.Item>
+                                            <p className="text-xs text-gray-500 mt-2">
+                                                Jika diisi, Wajib menambahkan tags [TUJUAN_EKSTERNAL] pada bagian isi surat
+                                            </p>
+                                        </Col>
+                                        <Col xs={24} md={12}></Col>
+                                    </Row>
+                                )}
+
                                 <Form.Item
                                     label="CC Surat"
                                     labelCol={{ span: 3 }}
@@ -851,8 +896,8 @@ export default function pageDraft() {
                                         <Button icon={<MdUpload />}>Pilih File Baru (Maks. 3 total)</Button>
                                     </Upload>
                                     <p className="text-xs text-gray-500 mt-2">
-                                        File yang sudah ada: {mediaList.length - removedMediaUIDs.length} | 
-                                        File baru: {fileList.length} | 
+                                        File yang sudah ada: {mediaList.length - removedMediaUIDs.length} |
+                                        File baru: {fileList.length} |
                                         Total: {mediaList.length - removedMediaUIDs.length + fileList.length}/3
                                     </p>
                                 </Form.Item>
@@ -868,8 +913,8 @@ export default function pageDraft() {
                                         {mediaList.length > 0 ? (
                                             <div className="space-y-2">
                                                 {mediaList.map((media, index) => (
-                                                    <div 
-                                                        key={media.UID} 
+                                                    <div
+                                                        key={media.UID}
                                                         className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
                                                     >
                                                         <div className="flex items-center space-x-3 flex-1">
@@ -884,6 +929,15 @@ export default function pageDraft() {
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center space-x-2">
+                                                            {isPdfFile(media.Name) && (
+                                                                <Button
+                                                                    icon={<MdVisibility />}
+                                                                    onClick={() => handlePreview(media.UID, media.Name)}
+                                                                    size="small"
+                                                                >
+                                                                    Preview
+                                                                </Button>
+                                                            )}
                                                             <Button
                                                                 type="primary"
                                                                 icon={<MdDownload />}
@@ -933,6 +987,7 @@ export default function pageDraft() {
                                     triggerSave={triggerSave}
                                     triggerReset={triggerReset}
                                     messageClassification={messageClassification}
+                                    isMessageRemark={isMessageRemark}
                                 />
                             </Suspense>
                         </div>
@@ -1023,6 +1078,13 @@ export default function pageDraft() {
                     </div>
                 </Modal>
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

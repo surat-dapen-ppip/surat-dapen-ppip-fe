@@ -13,14 +13,19 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import moment from 'moment';
 import { getMediaByUid } from '@/services/media';
-import { MdDownload, MdInsertDriveFile } from 'react-icons/md';
+import { MdDownload, MdInsertDriveFile, MdVisibility } from 'react-icons/md';
 import RichEditorReadOnlyV2 from '@/components/richEditorReadOnlyV2';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
+
+const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
 
 export default function pageView() {
     const router = useRouter()
 
     const [dataMessage, setDataMessage] = useState()
+    const [messageClassification, setMessageClassification] = useState()
+
     const [isLoadingData, setIsLoadingData] = useState(true)
     const [FormMessage] = Form.useForm()
 
@@ -117,6 +122,13 @@ export default function pageView() {
     const API_URL = process.env.NEXT_PUBLIC_PUBLIC_URL
     const [mediaList, setMediaList] = useState([])
     const [downloadingStates, setDownloadingStates] = useState({})
+    const [previewMedia, setPreviewMedia] = useState(null)
+
+    const handlePreview = (mediaUID, fileName) => {
+        setPreviewMedia({ uid: mediaUID, name: fileName });
+    };
+
+    const handleClosePreview = () => setPreviewMedia(null);
 
     const handleDownload = async (mediaUID, fileName) => {
         if (typeof window !== 'undefined') {
@@ -222,6 +234,7 @@ export default function pageView() {
                     FormMessage.setFieldValue('NatureUID', data.NatureUID)
                     FormMessage.setFieldValue('PriorityUID', data.PriorityUID)
                     FormMessage.setFieldValue('Information', data.Information)
+                    setMessageClassification(data.MessageClassification)
 
                     if (data.MessageClassification == 1) {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberKeluar)
@@ -230,6 +243,8 @@ export default function pageView() {
                         FormMessage.setFieldValue('EventNumber', data.EventNumberMemo)
                         FormMessage.setFieldValue('EventNumberSub', data.EventNumberSubMemo)
                     }
+
+                    FormMessage.setFieldValue('MessageRemarkSender', data.MessageRemarkSender)
 
                     const responseUser = await getUsers()
                     const optionUser = responseUser.data?.map((record) => {
@@ -488,6 +503,28 @@ export default function pageView() {
                             <Col xs={24} md={12}></Col>
                         </Row>
 
+                        {messageClassification == 1 && (
+                            <Row gutter={[24, 16]}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        label="Tujuan Surat Eksternal"
+                                        name={"MessageRemarkSender"}
+                                    >
+                                        <input
+                                            type="text"
+                                            placeholder="Input Judul Surat Masuk"
+                                            className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                            disabled
+                                        />
+                                    </Form.Item>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                            <span className='text-red-500'>*</span> Apabila kolom diisi, wajib untuk menambahkan tag <b>[TUJUAN_EKSTERNAL]</b> pada bagian isi surat
+                                        </p>
+                                </Col>
+                                <Col xs={24} md={12}></Col>
+                            </Row>
+                        )}
+
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
                                 <Form.Item
@@ -555,17 +592,27 @@ export default function pageView() {
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <Button
-                                                    type="primary"
-                                                    icon={<MdDownload />}
-                                                    onClick={() => handleDownload(media.UID, media.Name)}
-                                                    loading={downloadingStates[media.UID]}
-                                                    disabled={downloadingStates[media.UID]}
-                                                    size="small"
-                                                    className="flex-shrink-0"
-                                                >
-                                                    {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
-                                                </Button>
+                                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                                    {isPdfFile(media.Name) && (
+                                                        <Button
+                                                            icon={<MdVisibility />}
+                                                            onClick={() => handlePreview(media.UID, media.Name)}
+                                                            size="small"
+                                                        >
+                                                            Preview
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<MdDownload />}
+                                                        onClick={() => handleDownload(media.UID, media.Name)}
+                                                        loading={downloadingStates[media.UID]}
+                                                        disabled={downloadingStates[media.UID]}
+                                                        size="small"
+                                                    >
+                                                        {downloadingStates[media.UID] ? 'Downloading...' : 'Download'}
+                                                    </Button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -590,6 +637,13 @@ export default function pageView() {
                     </Suspense>
                 </div>
             </Spin>
+
+            <PdfPreviewModal
+                open={!!previewMedia}
+                onClose={handleClosePreview}
+                mediaUid={previewMedia?.uid}
+                filename={previewMedia?.name}
+            />
         </main >
     )
 }

@@ -70,13 +70,6 @@ export default function RichEditReadOnlyComponent({
   useEffect(() => {
     if (isEditorReady && currentDocument) {
       richEditRef.current.openDocument(currentDocument, "DocumentName", 4);
-      setTimeout(() => {
-        richEditRef.current.exportToBase64(function (documentAsBase64) {
-          // onSaveComplete(documentAsBase64);
-          console.log("sdsds",documentAsBase64);
-          
-        });
-      }, 5000);
     }
   }, [isEditorReady, currentDocument]);
 

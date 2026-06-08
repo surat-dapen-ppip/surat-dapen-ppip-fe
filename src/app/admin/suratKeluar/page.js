@@ -25,6 +25,7 @@ export default function pageSuratKeluar() {
     const { role, recipientUID, name, fetchCount } = useLayoutContext();
     const [FormMessage] = Form.useForm()
     const messageClassification = 1
+    const [isMessageRemark, setIsMessageRemark] = useState(false)
 
     const [isModalDraftOpen, setIsModalDraftOpen] = useState(false)
     const [isModalResetOpen, setIsModalResetOpen] = useState(false)
@@ -269,10 +270,10 @@ export default function pageSuratKeluar() {
             });
 
             // Wait for all uploads to complete
-            
+
             const uids = await Promise.all(uploadPromises);
 
-            console.log('im from handle upload',uids)
+            console.log('im from handle upload', uids)
             return uids.join(',');
         } catch (error) {
             message.error('Gagal mengupload file');
@@ -466,7 +467,11 @@ export default function pageSuratKeluar() {
                                         rules={[{ required: true, message: 'Tolong masukan Jenis Surat' }]}
                                     >
                                         <Select
-                                            options={optionType}
+                                            showSearch
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
+                                            options={optionType.sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3 w-full single"
                                             onSelect={(value, _) => {
                                                 fetchTemplateName(value);
@@ -484,7 +489,11 @@ export default function pageSuratKeluar() {
                                     >
                                         <Select
                                             labelInValue
-                                            options={optionTemplate}
+                                            showSearch
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
+                                            options={optionTemplate?.sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3 w-full single"
                                             onSelect={(option) => {
                                                 fetchTemplate(option.value)
@@ -554,12 +563,16 @@ export default function pageSuratKeluar() {
                                     >
                                         <Select
                                             labelInValue
+                                            showSearch
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
                                             options={dataUser?.map((record) => {
                                                 return {
                                                     value: record.UID,
                                                     label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
                                                 }
-                                            })}
+                                            }).sort((a, b) => a.label.localeCompare(b.label))}
                                             mode="multiple"
                                             placeholder="Pilih Reviewer Surat"
                                         />
@@ -577,12 +590,15 @@ export default function pageSuratKeluar() {
                                     >
                                         <Select
                                             labelInValue
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
                                             options={dataUser?.map((record) => {
                                                 return {
                                                     value: record.UID,
                                                     label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
                                                 }
-                                            })}
+                                            }).sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3 single"
                                             placeholder="Pilih Approver Surat"
                                         />
@@ -602,12 +618,15 @@ export default function pageSuratKeluar() {
                                         <Select
                                             labelInValue
                                             mode="multiple"
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
                                             options={dataUser?.map((record) => {
                                                 return {
                                                     value: record.UID,
                                                     label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
                                                 }
-                                            })}
+                                            }).sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3"
                                             placeholder="Pilih Tujuan Surat"
                                         />
@@ -615,6 +634,35 @@ export default function pageSuratKeluar() {
                                 </Col>
                                 <Col xs={24} md={12}></Col>
                             </Row>
+
+                            {messageClassification == 1 && (
+                                <Row gutter={[24, 16]}>
+                                    <Col xs={24} md={12}>
+                                        <Form.Item
+                                            label="Tujuan Surat Eksternal"
+                                            name={"MessageRemarkSender"}
+                                        >
+                                            <input
+                                                type="text"
+                                                placeholder="Input Judul Surat Masuk"
+                                                className="text-sm p-3 border-0 bg-gray-50 rounded text-black placeholder-gray-300 w-full"
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    if (value.trim() !== "") {
+                                                        setIsMessageRemark(true);
+                                                    } else {
+                                                        setIsMessageRemark(false);
+                                                    }
+                                                }}
+                                            />
+                                        </Form.Item>
+                                        <p className="text-xs text-gray-500 mt-2">
+                                            <span className='text-red-500'>*</span> Apabila kolom diisi, wajib untuk menambahkan tag <b>[TUJUAN_EKSTERNAL]</b> pada bagian isi surat
+                                        </p>
+                                    </Col>
+                                    <Col xs={24} md={12}></Col>
+                                </Row>
+                            )}
 
                             <Row gutter={[24, 16]}>
                                 <Col xs={24} md={12}>
@@ -625,12 +673,15 @@ export default function pageSuratKeluar() {
                                         <Select
                                             labelInValue
                                             mode="multiple"
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
                                             options={dataUser?.map((record) => {
                                                 return {
                                                     value: record.UID,
                                                     label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
                                                 }
-                                            })}
+                                            }).sort((a, b) => a.label.localeCompare(b.label))}
                                             className="mb-3"
                                             placeholder="Pilih CC Surat"
                                         />
@@ -687,11 +738,13 @@ export default function pageSuratKeluar() {
                         <Suspense fallback={<div>Loading...</div>}>
                             <RichEditComponent
                                 currentDocument={currentDocument}
+                                isMessageRemark={isMessageRemark}
                                 setCurrentDocument={setCurrentDocument}
                                 onSaveComplete={handleOnSaveComplete}
                                 triggerSave={triggerSave}
                                 triggerReset={triggerReset}
                                 messageClassification={messageClassification}
+                                setLoadingSubmit={setLoadingSubmit}
                             />
                         </Suspense>
                     </div>

@@ -9,6 +9,7 @@ import { message, Spin } from "antd";
 const RichEditorReviewV2 = forwardRef(({
     getCurrentDocument,
     getMessageClassification,
+    getCurrentMessageRemark,
     onSaveComplete,
     onUpdateDocument,
     isOpen,
@@ -35,6 +36,10 @@ const RichEditorReviewV2 = forwardRef(({
         } else {
             return false
         }
+
+        if (getCurrentMessageRemark()?.trim() != "") {
+            requiredTags.push("[TUJUAN_EKSTERNAL]")
+        }
         return requiredTags.every(tag => textMessage.includes(tag));
     }
 
@@ -44,6 +49,10 @@ const RichEditorReviewV2 = forwardRef(({
             errorMessage = "Tolong lengkapi FLAG [NO_SURAT] dan [TGL_SURAT]"
         } else if (messageClassification == 2) {
             errorMessage = "Tolong lengkapi FLAG [NO_SURAT], [TTD] dan [TGL_SURAT]"
+        }
+
+        if (getCurrentMessageRemark()?.trim() != "") {
+            errorMessage += " dan [TUJUAN_EKSTERNAL]"
         }
         message.error(errorMessage)
     }

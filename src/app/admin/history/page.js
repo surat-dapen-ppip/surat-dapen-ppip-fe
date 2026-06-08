@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
-import { getHistory, getHistoryNoStatus, getMessages } from "@/services/message";
-import { Input, message, Select, Space, Table } from "antd";
+import { exportHistory, getHistory, getHistoryNoStatus, getMessages } from "@/services/message";
+import { Button, DatePicker, message, Select, Space, Table } from "antd";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import CryptoJS from 'crypto-js';
@@ -37,40 +37,60 @@ export default function pageHistory() {
     const [MessageSender, setMessageSender] = useState("")
     const [MessageOrder, setMessageOrder] = useState("")
     const [MessageCategory, setMessageCategory] = useState("")
+    const [dateRange, setDateRange] = useState(null)
+    const [exporting, setExporting] = useState(false)
 
-
+    const formatDateRange = (range) => {
+        if (!range?.[0] || !range?.[1]) return { startDate: undefined, endDate: undefined }
+        return {
+            startDate: range[0].format('YYYY-MM-DD'),
+            endDate: range[1].format('YYYY-MM-DD'),
+        }
+    }
 
     const handleSearch = async () => {
-        await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory)
+        const { startDate, endDate } = formatDateRange(dateRange)
+        await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, startDate, endDate)
     }
 
     const handleSelectOrderBy = async (value) => {
         setMessageOrder(value)
-        await fetchMessage(keyword, MessageNumber, MessageSender, value, MessageCategory)
+        const { startDate, endDate } = formatDateRange(dateRange)
+        await fetchMessage(keyword, MessageNumber, MessageSender, value, MessageCategory, startDate, endDate)
     }
 
     const handleDiselectOrderBy = async () => {
         setMessageOrder("")
-        await fetchMessage(keyword, MessageNumber, MessageSender, "", MessageCategory)
+        const { startDate, endDate } = formatDateRange(dateRange)
+        await fetchMessage(keyword, MessageNumber, MessageSender, "", MessageCategory, startDate, endDate)
     }
 
     const handleSelectCategory = async (value) => {
         setMessageCategory(value)
-        await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, value)
+        const { startDate, endDate } = formatDateRange(dateRange)
+        await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, value, startDate, endDate)
     }
 
     const handleDeselectCategory = async () => {
         setMessageCategory("")
-        await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, "")
+        const { startDate, endDate } = formatDateRange(dateRange)
+        await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, "", startDate, endDate)
+    }
+
+    const handleDateRangeChange = async (dates) => {
+        setDateRange(dates)
+        const { startDate, endDate } = formatDateRange(dates)
+        await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, startDate, endDate)
     }
 
     const handleKeyPress = async (e) => {
         if (e.key === 'Enter') {
-            await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory)
+            const { startDate, endDate } = formatDateRange(dateRange)
+            await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, startDate, endDate)
         }
     }
 
-    const fetchMessage = async (keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory) => {
+    const fetchMessage = async (keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, startDate, endDate) => {
         if (typeof window !== 'undefined') {
             const currentRoleID = window.localStorage.getItem('RoleID');
             let roleID = 0
@@ -83,19 +103,62 @@ export default function pageHistory() {
 
             const userUID = window.localStorage.getItem('UserUID')
             if (roleID != 0) {
-                const response = await getHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory)
+                const response = await getHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, undefined, startDate, endDate)
                 if (response) {
                     setDataMessage(response.data)
                 }
             } else {
-                const response = await getHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, "true")
+                const response = await getHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, "true", startDate, endDate)
 
                 if (response) {
                     setDataMessage(response.data)
                 }
             }
         }
+    }
 
+    const handleExport = async () => {
+        if (typeof window === 'undefined') return
+
+        try {
+            setExporting(true)
+            const currentRoleID = window.localStorage.getItem('RoleID');
+            let roleID = 0
+            for (let i = 0; i <= 2; i++) {
+                if (CryptoJS.HmacMD5(i, 'EE_MENCRET') == currentRoleID) {
+                    roleID = i
+                    break;
+                }
+            }
+
+            const userUID = window.localStorage.getItem('UserUID')
+            const { startDate, endDate } = formatDateRange(dateRange)
+            const response = roleID != 0
+                ? await exportHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, undefined, startDate, endDate)
+                : await exportHistory(userUID, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, "true", startDate, endDate)
+
+            const disposition = response.headers['content-disposition']
+            let filename = 'history.xlsx'
+            if (disposition) {
+                const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+                if (match?.[1]) {
+                    filename = match[1].replace(/['"]/g, '')
+                }
+            }
+
+            const url = window.URL.createObjectURL(new Blob([response.data]))
+            const link = document.createElement('a')
+            link.href = url
+            link.setAttribute('download', filename)
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(url)
+        } catch (error) {
+            message.error('Gagal mengekspor data history')
+        } finally {
+            setExporting(false)
+        }
     }
 
     const fetchUser = async () => {
@@ -184,19 +247,21 @@ export default function pageHistory() {
         MessageSender,
         MessageOrder,
         MessageCategory,
+        dateRange,
     });
     
 
     useEffect(() => {
-        stateRef.current = { keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory };
-    }, [keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory]);
+        stateRef.current = { keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, dateRange };
+    }, [keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, dateRange]);
 
 
     useEffect(() => {
         const interval = setInterval(
             async () => {
-                const { keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory } = stateRef.current;
-                await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory);
+                const { keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, dateRange } = stateRef.current;
+                const { startDate, endDate } = formatDateRange(dateRange);
+                await fetchMessage(keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory, startDate, endDate);
                 const userUID = window.localStorage.getItem('UserUID')
                 const currentRoleID = window.localStorage.getItem('RoleID');
 
@@ -257,7 +322,8 @@ export default function pageHistory() {
                                     className="pl-3 pr-3"
                                     onClick={() => {
                                         setMessageNumber("")
-                                        fetchMessage(keyword, "", MessageSender, MessageOrder, MessageCategory)
+                                        const { startDate, endDate } = formatDateRange(dateRange)
+                                        fetchMessage(keyword, "", MessageSender, MessageOrder, MessageCategory, startDate, endDate)
                                     }}
                                 ><MdClear className="text-lg top-1 relative" /></button>
                             </div>
@@ -277,7 +343,8 @@ export default function pageHistory() {
                                     className="pl-3 pr-3"
                                     onClick={() => {
                                         setKeyword("")
-                                        fetchMessage("", MessageNumber, MessageSender, MessageOrder, MessageCategory)
+                                        const { startDate, endDate } = formatDateRange(dateRange)
+                                        fetchMessage("", MessageNumber, MessageSender, MessageOrder, MessageCategory, startDate, endDate)
                                     }}
                                 ><MdClear className="text-lg top-1 relative" /></button>
                             </div>
@@ -298,9 +365,20 @@ export default function pageHistory() {
                                     className="pl-3 pr-3"
                                     onClick={() => {
                                         setMessageSender("")
-                                        fetchMessage(keyword, MessageNumber, "", MessageOrder, MessageCategory)
+                                        const { startDate, endDate } = formatDateRange(dateRange)
+                                        fetchMessage(keyword, MessageNumber, "", MessageOrder, MessageCategory, startDate, endDate)
                                     }}
                                 ><MdClear className="text-lg top-1 relative" /></button>
+                            </div>
+                            <div className="bg-gray-100 p-1 rounded mb-3">
+                                <DatePicker.RangePicker
+                                    className="bg-gray-100"
+                                    value={dateRange}
+                                    onChange={handleDateRangeChange}
+                                    format="YYYY-MM-DD"
+                                    placeholder={['Tanggal awal', 'Tanggal akhir']}
+                                    size="large"
+                                />
                             </div>
                         </Space>
                     </div>
@@ -318,6 +396,14 @@ export default function pageHistory() {
                                     placeholder={"Order By"}
                                 />
                             </div>
+                            <Button
+                                loading={exporting}
+                                onClick={handleExport}
+                                size="large"
+                                type="primary"
+                            >
+                                Export
+                            </Button>
                         </Space>
                     </div>
                 </div>
