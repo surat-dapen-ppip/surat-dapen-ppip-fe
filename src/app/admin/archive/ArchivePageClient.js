@@ -1365,8 +1365,8 @@ export default function ArchivePageClient() {
             {/* Edit Modal */}
             {showEditModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg px-6 w-full max-w-5xl shadow-xl overflow-hidden max-h-[90vh]">
-                        <div className="flex flex-col h-full overflow-y-auto gap-6">
+                    <div className="bg-white rounded-lg px-6 w-full max-w-5xl shadow-xl overflow-y-auto max-h-[90vh]">
+                        <div className="flex flex-col gap-6">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-lg font-semibold pt-6 sticky top-0 bg-white" style={{ zIndex: 9999999 }}>
                                     {editItem?.type === 'folder' ? 'Edit Folder' : 'Edit Dokumen'}
