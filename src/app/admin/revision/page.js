@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import { Button, Col, DatePicker, Form, message, Modal, Popconfirm, Row, Select, Space, Spin, Upload } from 'antd';
+import { Button, Col, DatePicker, Form, message, Modal, Popconfirm, Row, Select, Space, Spin, Tabs, Upload } from 'antd';
 import { MdArrowBack, MdCheck, MdClear, MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineAltRoute, MdOutlineDocumentScanner, MdOutlineKeyboardReturn, MdUpload, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
@@ -18,6 +18,7 @@ import moment from 'moment';
 import { GetBaseTemplate } from '@/utils/messageUtil';
 import { getMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
+import LogAktivitas from '@/components/logAktivitas';
 import { debounce } from 'lodash';
 import PdfPreviewModal from '@/components/PdfPreviewModal';
 
@@ -609,34 +610,13 @@ export default function pageDraft() {
         )
     }
 
-    return (
-        <main>
-            <div class="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-blue-400 hover:bg-blue-100 text-blue-400 cursor-pointer shadow-md"
-                    onClick={handleReset}
-                >
-                    <MdArrowBack className="mb-2 text-sm" />
-                    <div className="text-xs">
-                        Kembali
-                    </div>
-                </div>
-
-                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 hover:bg-green-100 text-green-400 cursor-pointer shadow-md"
-                    onClick={handleSubmit}
-                >
-                    <MdOutlineDocumentScanner className="mb-2 text-sm" />
-                    <div className="text-xs">
-                        Submit
-                    </div>
-                </div>
-            </div>
-
-            <h2 className="text-xl text-gray-700 font-semibold">
-                Revisi Surat
-            </h2>
-
-            <Spin spinning={loadingSubmit} tip="Sedang memproses, mohon tunggu...">
-
+    const tabsContent = [
+        {
+            key: '1',
+            label: (
+                <h2 className="text-lg font-semibold text-gray-700">Surat</h2>
+            ),
+            children: (
                 <Row gutter={30}>
                     <Col lg={18}>
                         <div class="p-6 bg-white shadow-sm rounded mt-5"
@@ -1021,6 +1001,46 @@ export default function pageDraft() {
                         ))}
                     </Col>
                 </Row>
+            )
+        },
+        {
+            key: '2',
+            label: (
+                <h2 className="text-lg font-semibold text-gray-700">Log Aktivitas</h2>
+            ),
+            children: <LogAktivitas uid={UID} />,
+        },
+    ]
+
+    return (
+        <main>
+            <div class="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
+                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-blue-400 hover:bg-blue-100 text-blue-400 cursor-pointer shadow-md"
+                    onClick={handleReset}
+                >
+                    <MdArrowBack className="mb-2 text-sm" />
+                    <div className="text-xs">
+                        Kembali
+                    </div>
+                </div>
+
+                <div className="bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 hover:bg-green-100 text-green-400 cursor-pointer shadow-md"
+                    onClick={handleSubmit}
+                >
+                    <MdOutlineDocumentScanner className="mb-2 text-sm" />
+                    <div className="text-xs">
+                        Submit
+                    </div>
+                </div>
+            </div>
+
+            <h2 className="text-xl text-gray-700 font-semibold">
+                Revisi Surat
+            </h2>
+
+            <Spin spinning={loadingSubmit} tip="Sedang memproses, mohon tunggu...">
+
+                <Tabs defaultActiveKey="1" items={tabsContent} size="lg" />
 
 
                 <Modal

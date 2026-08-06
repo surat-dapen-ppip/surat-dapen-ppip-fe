@@ -12,12 +12,16 @@ import {
     deleteDocument,
     updateDocument,
     getDocumentByUid,
-    getDirectoryInfoByUid
+    getDirectoryInfoByUid,
+    getPendingDeleteRequests,
+    approveDeleteRequest,
+    rejectDeleteRequest,
+    getMyDeleteRequests
 } from '@/services/archive';
 import { getDirectoryAccess, getDocumentAccess } from '@/services/access';
 import { getUsers } from '@/services/users';
 import { getOrganizations } from '@/services/organizations';
-import { MdOutlineUpload, MdEdit, MdDelete, MdFolder, MdFolderOpen, MdArrowBack, MdInsertDriveFile, MdAdd, MdRefresh, MdClose, MdPeople, MdContentCopy, MdLink, MdBusiness, MdVisibility } from 'react-icons/md';
+import { MdOutlineUpload, MdEdit, MdDelete, MdFolder, MdFolderOpen, MdArrowBack, MdInsertDriveFile, MdAdd, MdRefresh, MdClose, MdPeople, MdContentCopy, MdLink, MdBusiness, MdVisibility, MdOutlineQueryBuilder } from 'react-icons/md';
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
@@ -107,7 +111,6 @@ export default function ArchivePageClient() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const [file, setFile] = useState(null);
     const [viewMode, setViewMode] = useState('grid');
     const [selectedItem, setSelectedItem] = useState(null);
     const [showNewFolderModal, setShowNewFolderModal] = useState(false);
@@ -143,6 +146,11 @@ export default function ArchivePageClient() {
     const [editAccessUsers, setEditAccessUsers] = useState([]);
     const [editAccessOrganizations, setEditAccessOrganizations] = useState([]);
     const [isFetchingEditAccess, setIsFetchingEditAccess] = useState(false);
+    const [showPendingDeleteModal, setShowPendingDeleteModal] = useState(false);
+    const [pendingDeleteRequests, setPendingDeleteRequests] = useState([]);
+    const [myDeleteRequests, setMyDeleteRequests] = useState([]);
+    const [deleteModalTab, setDeleteModalTab] = useState('incoming'); // 'incoming' or 'my_requests'
+    const [isFetchingDeleteRequests, setIsFetchingDeleteRequests] = useState(false);
 
 
     useEffect(() => {
@@ -434,7 +442,7 @@ export default function ArchivePageClient() {
         const ownerUid = localStorage.getItem('UserUID');
 
         try {
-            // fetch folder info 
+            // fetch folder info
             if (currentFolder != "") {
                 const infoResponse = await getDirectoryInfoByUid(currentFolder);
                 if (infoResponse && infoResponse.data) {
@@ -727,14 +735,15 @@ export default function ArchivePageClient() {
     };
 
     const handleFileChange = (e) => {
-        if (e.target.files.length > 0) {
-            setFile(e.target.files[0]);
-            handleUpload(e.target.files[0]);
+        const files = Array.from(e.target.files || []);
+        if (files.length > 0) {
+            handleUpload(files);
         }
+        e.target.value = '';
     };
 
-    const handleUpload = async (file) => {
-        if (!file) return;
+    const handleUpload = async (files) => {
+        if (!files || files.length === 0) return;
 
         setIsUploading(true);
         setErrorMessage('');
@@ -746,12 +755,23 @@ export default function ArchivePageClient() {
                 throw new Error('User not authenticated');
             }
 
-            // Upload to current folder
-            await createDocument(file, file.name, currentFolder, ownerUid);
+            // Upload each file independently so one failure doesn't block the others
+            const results = await Promise.allSettled(
+                files.map((f) => createDocument(f, f.name, currentFolder, ownerUid))
+            );
             await fetchFolderContents();
-            // Refresh documents in the current folder
-            // In a real implementation, you would fetch the updated documents
-            setErrorMessage('File uploaded successfully!');
+
+            const failedNames = results
+                .map((result, index) => (result.status === 'rejected' ? files[index].name : null))
+                .filter(Boolean);
+
+            if (failedNames.length === 0) {
+                setErrorMessage(`${files.length} file(s) uploaded successfully!`);
+            } else if (failedNames.length === files.length) {
+                setErrorMessage('Failed to upload file(s). Please try again.');
+            } else {
+                setErrorMessage(`${files.length - failedNames.length} of ${files.length} files uploaded. Failed: ${failedNames.join(', ')}`);
+            }
         } catch (error) {
             console.error('Error uploading document:', error);
             setErrorMessage('Failed to upload file. Please try again.');
@@ -1083,7 +1103,7 @@ export default function ArchivePageClient() {
                     throw new Error('Cannot delete document: missing UID');
                 }
 
-                await deleteDocument(docUid);
+                const res = await deleteDocument(docUid, ownerUid);
 
                 // Refresh documents using getDocuments service
                 const docResponse = await getDocuments(currentFolder, ownerUid);
@@ -1101,12 +1121,85 @@ export default function ArchivePageClient() {
                 } else {
                     setDocuments([]);
                 }
+
+                if (res && res.data) {
+                    setErrorMessage('Pengajuan penghapusan dokumen berhasil dikirim dan menunggu persetujuan atasan. Dokumen belum terhapus sampai disetujui.');
+                } else if (res && res.message) {
+                    setErrorMessage(res.message);
+                } else {
+                    setErrorMessage('Dokumen berhasil dihapus!');
+                }
+                return;
             }
 
             setErrorMessage(`${type === 'folder' ? 'Folder' : 'Document'} deleted successfully!`);
         } catch (error) {
             console.error(`Error deleting ${type}:`, error);
             setErrorMessage(`Failed to delete ${type}. Please try again.`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const fetchPendingDeleteRequests = async () => {
+        try {
+            setIsFetchingDeleteRequests(true);
+            const ownerUid = localStorage.getItem('UserUID');
+            const [resPending, resMy] = await Promise.allSettled([
+                getPendingDeleteRequests(ownerUid),
+                getMyDeleteRequests(ownerUid)
+            ]);
+            if (resPending.status === 'fulfilled' && resPending.value && resPending.value.data) {
+                setPendingDeleteRequests(resPending.value.data);
+            } else {
+                setPendingDeleteRequests([]);
+            }
+            if (resMy.status === 'fulfilled' && resMy.value && resMy.value.data) {
+                setMyDeleteRequests(resMy.value.data);
+            } else {
+                setMyDeleteRequests([]);
+            }
+        } catch (error) {
+            console.error('Error fetching delete requests:', error);
+            setPendingDeleteRequests([]);
+            setMyDeleteRequests([]);
+        } finally {
+            setIsFetchingDeleteRequests(false);
+        }
+    };
+
+    const handleOpenPendingDeleteModal = async () => {
+        setShowPendingDeleteModal(true);
+        await fetchPendingDeleteRequests();
+    };
+
+    const handleApproveDeleteRequest = async (requestUid) => {
+        try {
+            setIsLoading(true);
+            const ownerUid = localStorage.getItem('UserUID');
+            await approveDeleteRequest(requestUid, ownerUid);
+            setErrorMessage('Penghapusan dokumen berhasil disetujui!');
+            await fetchPendingDeleteRequests();
+            await fetchFolderContents();
+        } catch (error) {
+            console.error('Error approving delete request:', error);
+            setErrorMessage('Gagal menyetujui penghapusan dokumen.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleRejectDeleteRequest = async (requestUid) => {
+        const reason = prompt('Masukkan alasan penolakan (opsional):') || '';
+        try {
+            setIsLoading(true);
+            const ownerUid = localStorage.getItem('UserUID');
+            await rejectDeleteRequest(requestUid, ownerUid, reason);
+            setErrorMessage('Pengajuan penghapusan dokumen ditolak.');
+            await fetchPendingDeleteRequests();
+        } catch (error) {
+            console.error('Error rejecting delete request:', error);
+            setErrorMessage('Gagal menolak pengajuan penghapusan.');
         } finally {
             setIsLoading(false);
         }
@@ -1698,6 +1791,168 @@ export default function ArchivePageClient() {
                 </div>
             )}
 
+            {/* Modal Persetujuan Hapus Dokumen */}
+            {showPendingDeleteModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-6 relative max-h-[85vh] flex flex-col">
+                        <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                                    <MdOutlineQueryBuilder className="mr-2 text-amber-500" />
+                                    Persetujuan Penghapusan Arsip
+                                </h2>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Kelola pengajuan hapus dokumen arsip berbasis hirarki jabatan dan organisasi.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowPendingDeleteModal(false)}
+                                className="text-gray-400 hover:text-gray-600 rounded-lg p-1 hover:bg-gray-100"
+                            >
+                                <MdClose size={24} />
+                            </button>
+                        </div>
+
+                        {/* Navigasi Tab Modal */}
+                        <div className="flex border-b border-gray-200 mt-3 space-x-4 text-xs font-semibold">
+                            <button
+                                onClick={() => setDeleteModalTab('incoming')}
+                                className={`pb-2 border-b-2 transition-colors flex items-center ${deleteModalTab === 'incoming' ? 'border-amber-500 text-amber-600 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Pengajuan Masuk (Approver)
+                                {pendingDeleteRequests.length > 0 && (
+                                    <span className="ml-1.5 bg-amber-500 text-white rounded-full px-1.5 py-0.2 text-[10px]">
+                                        {pendingDeleteRequests.length}
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setDeleteModalTab('my_requests')}
+                                className={`pb-2 border-b-2 transition-colors flex items-center ${deleteModalTab === 'my_requests' ? 'border-blue-500 text-blue-600 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Status Pengajuan Saya (Pengaju)
+                                {myDeleteRequests.length > 0 && (
+                                    <span className="ml-1.5 bg-blue-500 text-white rounded-full px-1.5 py-0.2 text-[10px]">
+                                        {myDeleteRequests.length}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+
+                        <div className="py-4 flex-1 overflow-y-auto">
+                            {isFetchingDeleteRequests ? (
+                                <div className="flex justify-center items-center py-12 text-gray-500">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500 mr-3"></div>
+                                    Memuat daftar pengajuan...
+                                </div>
+                            ) : deleteModalTab === 'incoming' ? (
+                                /* TAB 1: Pengajuan Masuk (Approver View) */
+                                pendingDeleteRequests.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                        <p className="font-medium text-sm">Tidak ada pengajuan hapus yang tertunda.</p>
+                                        <p className="text-xs text-gray-400 mt-1">Belum ada anggota organisasi yang mengajukan penghapusan.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {pendingDeleteRequests.map((req) => (
+                                            <div
+                                                key={req.uid || req.id}
+                                                className="p-4 border border-gray-200 rounded-lg bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-amber-300 transition-colors"
+                                            >
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center text-sm font-semibold text-gray-900">
+                                                        <MdInsertDriveFile className="text-red-500 mr-2 flex-shrink-0" size={18} />
+                                                        <span>{req.filename || req.Filename || req.archive_document?.filename || req.ArchiveDocument?.Filename || 'Dokumen Arsip'}</span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 space-y-0.5">
+                                                        <p>Pemohon: <span className="font-medium text-gray-700">{req.requester_name || req.RequesterName || req.requester_uid}</span></p>
+                                                        {req.reason && <p>Alasan: <span className="italic text-gray-600">&quot;{req.reason}&quot;</span></p>}
+                                                        <p className="text-[11px] text-gray-400">Tanggal: {new Date(req.created_at || req.CreatedAt).toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                                                    <button
+                                                        onClick={() => handleRejectDeleteRequest(req.uid || req.UID)}
+                                                        className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-semibold transition-colors border border-red-200"
+                                                    >
+                                                        Tolak
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleApproveDeleteRequest(req.uid || req.UID)}
+                                                        className="px-3 py-1.5 bg-green-600 text-white hover:bg-green-700 rounded text-xs font-semibold transition-colors shadow-sm"
+                                                    >
+                                                        Setujui (Hapus)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            ) : (
+                                /* TAB 2: Status Pengajuan Saya (Requester View) */
+                                myDeleteRequests.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                        <p className="font-medium text-sm">Anda belum memiliki riwayat pengajuan hapus.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {myDeleteRequests.map((req) => (
+                                            <div
+                                                key={req.uid || req.id}
+                                                className="p-4 border border-gray-200 rounded-lg bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-blue-200 transition-colors"
+                                            >
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center text-sm font-semibold text-gray-900">
+                                                        <MdInsertDriveFile className="text-gray-600 mr-2 flex-shrink-0" size={18} />
+                                                        <span>{req.filename || req.Filename || req.archive_document?.filename || 'Dokumen Arsip'}</span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 space-y-0.5">
+                                                        {(req.approver_name || req.ApproverName) && (
+                                                            <p>Approver: <span className="font-medium text-gray-700">{req.approver_name || req.ApproverName}</span></p>
+                                                        )}
+                                                        {req.reason && <p>Catatan / Alasan: <span className="italic text-gray-600">&quot;{req.reason}&quot;</span></p>}
+                                                        <p className="text-[11px] text-gray-400">Tanggal Pengajuan: {new Date(req.created_at || req.CreatedAt).toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                                                    {req.status === 0 && (
+                                                        <span className="px-2.5 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-full font-semibold text-xs flex items-center">
+                                                            <MdOutlineQueryBuilder className="mr-1" /> Menunggu Persetujuan
+                                                        </span>
+                                                    )}
+                                                    {req.status === 1 && (
+                                                        <span className="px-2.5 py-1 bg-green-100 text-green-800 border border-green-300 rounded-full font-semibold text-xs">
+                                                            Disetujui & Dihapus
+                                                        </span>
+                                                    )}
+                                                    {req.status === 2 && (
+                                                        <span className="px-2.5 py-1 bg-red-100 text-red-800 border border-red-300 rounded-full font-semibold text-xs">
+                                                            Ditolak
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            )}
+                        </div>
+
+                        <div className="pt-3 border-t border-gray-200 flex justify-between items-center text-xs text-gray-500">
+                            <span>Total data: <strong>{deleteModalTab === 'incoming' ? pendingDeleteRequests.length : myDeleteRequests.length}</strong></span>
+                            <button
+                                onClick={fetchPendingDeleteRequests}
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-medium flex items-center"
+                            >
+                                <MdRefresh className="mr-1" /> Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <h1 className="text-2xl font-bold mb-6">Arsip Dokumen</h1>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -1784,6 +2039,14 @@ export default function ArchivePageClient() {
                             )
                         }
 
+                        <button
+                            onClick={handleOpenPendingDeleteModal}
+                            className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded flex items-center shadow-sm"
+                            disabled={isLoading}
+                        >
+                            <MdOutlineQueryBuilder className="mr-2" /> Persetujuan Hapus
+                        </button>
+
                     </div>
 
 
@@ -1792,6 +2055,7 @@ export default function ArchivePageClient() {
                         id="fileInput"
                         className="hidden"
                         accept="application/pdf"
+                        multiple
                         onChange={handleFileChange}
                     />
                 </div>

@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CryptoJS from 'crypto-js';
 import { countMessagesForApprover, countMessagesForReviewer, getCountHistory, getCountInbox } from '@/services/message';
+import { getNotificationCount, getNotifications, markNotificationRead as markNotificationReadApi } from '@/services/notification';
 
 const LayoutContext = createContext();
 
@@ -15,6 +16,8 @@ export const LayoutProvider = ({ children }) => {
   const [countInbox, setCountInbox] = useState(0);
   const [countHistory, setCountHistory] = useState(0);
   const [countDaftarSurat, setCountDaftarSurat] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
 
   const fetchCount = async (roleID, recipientUID, classification) => {
     if (typeof window !== 'undefined') {
@@ -43,6 +46,38 @@ export const LayoutProvider = ({ children }) => {
     }
   };
 
+  const fetchNotificationCount = async (userUID) => {
+    if (typeof window !== 'undefined' && userUID) {
+      try {
+        const res = await getNotificationCount(userUID);
+        setNotificationCount(res.data || 0);
+      } catch (error) {
+        // keep previous count on failure
+      }
+    }
+  };
+
+  const fetchNotifications = async (userUID) => {
+    if (typeof window !== 'undefined' && userUID) {
+      try {
+        const res = await getNotifications(userUID, false);
+        setNotifications(res.data || []);
+      } catch (error) {
+        // keep previous list on failure
+      }
+    }
+  };
+
+  const markNotificationAsRead = async (uid) => {
+    try {
+      await markNotificationReadApi(uid);
+      setNotifications((prev) => prev.map((n) => (n.UID === uid ? { ...n, IsRead: true } : n)));
+      setNotificationCount((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      // no-op on failure
+    }
+  };
+
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       window.localStorage.clear();
@@ -51,6 +86,8 @@ export const LayoutProvider = ({ children }) => {
       setName("")
       setCountHistory(0)
       setCountInbox(0)
+      setNotificationCount(0)
+      setNotifications([])
     }
     router.push("/");
   };
@@ -78,11 +115,25 @@ export const LayoutProvider = ({ children }) => {
       setName(name);
 
       fetchCount(roleID, recipientUID, 0);
+      fetchNotificationCount(recipientUID);
     }
   }
 
   useEffect(() => {
     handleAuth()
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (typeof window !== 'undefined') {
+        const userUID = window.localStorage.getItem('UserUID');
+        if (userUID) {
+          fetchNotificationCount(userUID);
+        }
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -94,7 +145,11 @@ export const LayoutProvider = ({ children }) => {
         countInbox,
         countHistory,
         countDaftarSurat,
+        notificationCount,
+        notifications,
         fetchCount,
+        fetchNotifications,
+        markNotificationAsRead,
         handleLogout,
         handleAuth,
       }}

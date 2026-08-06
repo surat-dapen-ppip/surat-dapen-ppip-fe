@@ -225,9 +225,15 @@ export const updateDocument = async (uid, data) => {
  * @param {string} uid - Document UID
  * @returns {Promise<Object>} Success response
  */
-export const deleteDocument = async (uid) => {
+export const deleteDocument = async (uid, userUID, reason) => {
     try {
-        const response = await axiosInstance.delete(`/archive/document/${uid}`);
+        const ownerUid = userUID || (typeof window !== 'undefined' ? localStorage.getItem('UserUID') : null);
+        const response = await axiosInstance.delete(`/archive/document/${uid}`, {
+            params: {
+                user_uid: ownerUid,
+                reason: reason || ''
+            }
+        });
         return response.data;
     } catch (error) {
         throw error.response?.data || error;
@@ -242,6 +248,92 @@ export const deleteDocument = async (uid) => {
 export const getDocumentByMediaUid = async (mediaUid) => {
     try {
         const response = await axiosInstance.get(`/archive/document/media/${mediaUid}`);
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || error;
+    }
+};
+
+/**
+ * Get pending delete requests for approver
+ * @param {string} [userUID] - Approver user UID
+ * @returns {Promise<Object>} List of pending delete requests
+ */
+export const getPendingDeleteRequests = async (userUID) => {
+    try {
+        const ownerUid = userUID || (typeof window !== 'undefined' ? localStorage.getItem('UserUID') : null);
+        const response = await axiosInstance.get('/archive/document/delete-requests', {
+            params: { user_uid: ownerUid }
+        });
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || error;
+    }
+};
+
+/**
+ * Approve a document delete request
+ * @param {string} requestUid - Request UID
+ * @param {string} [userUID] - Approver user UID
+ * @returns {Promise<Object>} Success response
+ */
+export const approveDeleteRequest = async (requestUid, userUID) => {
+    try {
+        const ownerUid = userUID || (typeof window !== 'undefined' ? localStorage.getItem('UserUID') : null);
+        const response = await axiosInstance.post(`/archive/document/delete-requests/${requestUid}/approve`, {
+            user_uid: ownerUid
+        });
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || error;
+    }
+};
+
+/**
+ * Reject a document delete request
+ * @param {string} requestUid - Request UID
+ * @param {string} [userUID] - Approver user UID
+ * @param {string} [reason] - Rejection reason
+ * @returns {Promise<Object>} Success response
+ */
+export const rejectDeleteRequest = async (requestUid, userUID, reason) => {
+    try {
+        const ownerUid = userUID || (typeof window !== 'undefined' ? localStorage.getItem('UserUID') : null);
+        const response = await axiosInstance.post(`/archive/document/delete-requests/${requestUid}/reject`, {
+            user_uid: ownerUid,
+            reason: reason || ''
+        });
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || error;
+    }
+};
+
+/**
+ * Get log history for a document
+ * @param {string} documentUid - Document UID
+ * @returns {Promise<Object>} History log list
+ */
+export const getDocumentHistory = async (documentUid) => {
+    try {
+        const response = await axiosInstance.get(`/archive/document/history/${documentUid}`);
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || error;
+    }
+};
+
+/**
+ * Get delete requests created by current user
+ * @param {string} [userUID] - Requester user UID
+ * @returns {Promise<Object>} List of requester's delete requests
+ */
+export const getMyDeleteRequests = async (userUID) => {
+    try {
+        const ownerUid = userUID || (typeof window !== 'undefined' ? localStorage.getItem('UserUID') : null);
+        const response = await axiosInstance.get('/archive/document/my-delete-requests', {
+            params: { user_uid: ownerUid }
+        });
         return response.data;
     } catch (error) {
         throw error.response?.data || error;

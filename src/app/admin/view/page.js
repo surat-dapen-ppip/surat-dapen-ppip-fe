@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import { Form, message, Select, Spin, Row, Col, Button } from 'antd';
+import { Form, message, Select, Spin, Row, Col, Button, Tabs } from 'antd';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
@@ -16,6 +16,7 @@ import { getMediaByUid } from '@/services/media';
 import { MdDownload, MdInsertDriveFile, MdVisibility } from 'react-icons/md';
 import RichEditorReadOnlyV2 from '@/components/richEditorReadOnlyV2';
 import PdfPreviewModal from '@/components/PdfPreviewModal';
+import LogAktivitas from '@/components/logAktivitas';
 
 const isPdfFile = (name) => typeof name === 'string' && name.toLowerCase().endsWith('.pdf');
 
@@ -297,13 +298,14 @@ export default function pageView() {
         )
     }
 
-    return (
-        <main>
-            <h2 className="text-xl text-gray-700 font-semibold">
-                Lihat Surat
-            </h2>
-
-            <Spin spinning={loadingSubmit} tip="Sedang memproses, mohon tunggu...">
+    const tabsContent = [
+        {
+            key: '1',
+            label: (
+                <h2 className="text-lg font-semibold text-gray-700">Surat</h2>
+            ),
+            children: (
+                <div>
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
                     <h2 className="text-md font-semibold mb-5 text-gray-700">Detail Surat</h2>
                     <hr className="mb-8 bg-gray-300"></hr>
@@ -636,6 +638,26 @@ export default function pageView() {
                         />
                     </Suspense>
                 </div>
+                </div>
+            )
+        },
+        {
+            key: '2',
+            label: (
+                <h2 className="text-lg font-semibold text-gray-700">Log Aktivitas</h2>
+            ),
+            children: <LogAktivitas uid={dataMessage?.UID} />,
+        },
+    ]
+
+    return (
+        <main>
+            <h2 className="text-xl text-gray-700 font-semibold">
+                Lihat Surat
+            </h2>
+
+            <Spin spinning={loadingSubmit} tip="Sedang memproses, mohon tunggu...">
+                <Tabs defaultActiveKey="1" items={tabsContent} size="lg" />
             </Spin>
 
             <PdfPreviewModal

@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
-import { Button, Form, Input, message, Modal, Select, Spin, Row, Col } from 'antd';
+import { Button, Form, Input, message, Modal, Select, Spin, Row, Col, Tabs } from 'antd';
 import { MdArrowBack, MdClearAll, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner, MdVisibility } from 'react-icons/md';
 import { Suspense, useEffect, useState, useRef } from 'react';
 import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/services/messageTemplate';
@@ -18,6 +18,7 @@ import { createMessageRevision } from '@/services/messageRevision';
 import { getMediaByUid } from '@/services/media';
 import { createMessageRejection } from '@/services/messageRejection';
 import { debounce, set } from 'lodash';
+import LogAktivitas from '@/components/logAktivitas';
 import RichEditorSignatureMemoV2 from '@/components/richEditorSignatureMemoV2';
 import RichEditorReviewV2 from '@/components/richEditorReviewV2';
 import RichEditorSignatureV2 from '@/components/richEditorSignatureV2';
@@ -557,81 +558,14 @@ export default function pageReview() {
         )
     }
 
-    return (
-        <main>
-            {/* Lock Screen Overlay */}
-            {loadingSubmit && (isModalApproveMemoOpen || isModalApproveSuratKeluarOpen) && (
-                <div
-                    className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[9999]"
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        width: '100vw',
-                        height: '100vh'
-                    }}
-                >
-                    <div className="bg-white rounded-lg p-8 shadow-2xl flex flex-col items-center space-y-4">
-                        <Spin size="large" />
-                        <div className="text-lg font-semibold text-gray-800">
-                            Sedang memproses approval...
-                        </div>
-                        <div className="text-sm text-gray-600">
-                            Mohon tunggu, jangan tutup halaman ini
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <h2 className="text-xl text-gray-700 font-semibold">
-                Review Surat
-            </h2>
-
-            <Spin spinning={loadingSubmit} tip="Sedang memproses, mohon tunggu...">
-                <div className="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
-                    <div
-                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-blue-400 text-blue-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 cursor-pointer'}`}
-                        onClick={!loadingSubmit ? handleBack : undefined}
-                    >
-                        <MdArrowBack className="mb-2 text-sm" />
-                        <div className="text-xs">
-                            Kembali
-                        </div>
-                    </div>
-
-                    <div
-                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 text-yellow-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-yellow-100 cursor-pointer'}`}
-                        onClick={!loadingSubmit ? handleRevision : undefined}
-                    >
-                        <MdOutlineDocumentScanner className="mb-2 text-sm" />
-                        <div className="text-xs">
-                            Revisi
-                        </div>
-                    </div>
-
-                    <div
-                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 text-red-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-100 cursor-pointer'}`}
-                        onClick={!loadingSubmit ? handleReject : undefined}
-                    >
-                        <MdClearAll className="mb-2 text-sm" />
-                        <div className="text-xs">
-                            Tolak
-                        </div>
-                    </div>
-
-                    <div
-                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 text-green-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-100 cursor-pointer'}`}
-                        onClick={!loadingSubmit ? handleApprove : undefined}
-                    >
-                        <MdOutlineDocumentScanner className="mb-2 text-sm" />
-                        <div className="text-xs">
-                            Approve
-                        </div>
-                    </div>
-                </div>
-
+    const tabsContent = [
+        {
+            key: '1',
+            label: (
+                <h2 className="text-lg font-semibold text-gray-700">Surat</h2>
+            ),
+            children: (
+                <div>
                 <div className="p-6 bg-white shadow-sm rounded mt-5 w-[90%]">
                     <h2 className="text-md font-semibold mb-5 text-gray-700">Detail Surat</h2>
                     <hr className="mb-8 bg-gray-300"></hr>
@@ -701,7 +635,6 @@ export default function pageReview() {
                                 </Form.Item>
                             </Col>
                         </Row>
-
                         {/* No. Surat and Sifat Surat */}
                         <Row gutter={[24, 16]}>
                             <Col xs={24} md={12}>
@@ -959,7 +892,94 @@ export default function pageReview() {
                         />
                     </Suspense>
                 </div>
+                </div>
+            )
+        },
+        {
+            key: '2',
+            label: (
+                <h2 className="text-lg font-semibold text-gray-700">Log Aktivitas</h2>
+            ),
+            children: <LogAktivitas uid={UID} />,
+        },
+    ]
 
+    return (
+        <main>
+            {/* Lock Screen Overlay */}
+            {loadingSubmit && (isModalApproveMemoOpen || isModalApproveSuratKeluarOpen) && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[9999]"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        width: '100vw',
+                        height: '100vh'
+                    }}
+                >
+                    <div className="bg-white rounded-lg p-8 shadow-2xl flex flex-col items-center space-y-4">
+                        <Spin size="large" />
+                        <div className="text-lg font-semibold text-gray-800">
+                            Sedang memproses approval...
+                        </div>
+                        <div className="text-sm text-gray-600">
+                            Mohon tunggu, jangan tutup halaman ini
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <h2 className="text-xl text-gray-700 font-semibold">
+                Review Surat
+            </h2>
+
+            <Spin spinning={loadingSubmit} tip="Sedang memproses, mohon tunggu...">
+                <div className="flex p-3 bg-white shadow-sm rounded flex-col space-y-5 w-auto fixed top-1/2 -translate-y-1/2 right-0 shadow-lg z-50">
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-blue-400 text-blue-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleBack : undefined}
+                    >
+                        <MdArrowBack className="mb-2 text-sm" />
+                        <div className="text-xs">
+                            Kembali
+                        </div>
+                    </div>
+
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-yellow-400 text-yellow-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-yellow-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleRevision : undefined}
+                    >
+                        <MdOutlineDocumentScanner className="mb-2 text-sm" />
+                        <div className="text-xs">
+                            Revisi
+                        </div>
+                    </div>
+
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-red-400 text-red-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleReject : undefined}
+                    >
+                        <MdClearAll className="mb-2 text-sm" />
+                        <div className="text-xs">
+                            Tolak
+                        </div>
+                    </div>
+
+                    <div
+                        className={`bg-white flex items-center flex-col p-2 font-semibold rounded border border-green-400 text-green-400 shadow-md ${loadingSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-100 cursor-pointer'}`}
+                        onClick={!loadingSubmit ? handleApprove : undefined}
+                    >
+                        <MdOutlineDocumentScanner className="mb-2 text-sm" />
+                        <div className="text-xs">
+                            Approve
+                        </div>
+                    </div>
+                </div>
+
+                <Tabs defaultActiveKey="1" items={tabsContent} size="lg" />
 
                 <Modal
                     open={isModalRevisionOpen}

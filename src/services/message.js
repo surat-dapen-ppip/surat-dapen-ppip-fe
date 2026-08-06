@@ -381,6 +381,15 @@ export const getMessageByUid = async (uid) => {
   }
 };
 
+export const getMessageLogHistory = async (uid) => {
+  try {
+    const response = await axiosInstance.get(`/messages/${uid}/log-history`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export const getArchiveMessage = async (archived, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory) => {
   try {
     const response = await axiosInstance.get(`/messageMaster/archived`, {

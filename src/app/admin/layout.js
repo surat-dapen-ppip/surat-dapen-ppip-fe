@@ -11,9 +11,45 @@ import { useState, useEffect } from 'react';
 
 export default function Layout({ children }) {
     const router = useRouter()
-    const { role, name, countInbox, countHistory, countDaftarSurat,  handleLogout } = useLayoutContext();
+    const { role, name, recipientUID, countInbox, countHistory, countDaftarSurat, notificationCount, notifications, fetchNotifications, markNotificationAsRead, handleLogout } = useLayoutContext();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+    const notificationLabel = (type) => {
+        switch (type) {
+            case 'review_needed': return 'Membutuhkan Review';
+            case 'approval_needed': return 'Membutuhkan Persetujuan';
+            case 'disposisi': return 'Disposisi Surat';
+            case 'forward': return 'Surat Diteruskan';
+            case 'recipient': return 'Surat Ditujukan Kepada Anda';
+            default: return type;
+        }
+    };
+
+    const getNotificationTarget = (notif) => {
+        if (notif.Type === 'review_needed' || notif.Type === 'approval_needed') {
+            return `/admin/review?uid=${notif.MessageUID}`;
+        }
+        if (notif.message_classification === 0) {
+            return `/admin/inbox/detail-surat-masuk?uid=${notif.MessageUID}`;
+        }
+        return `/admin/inbox/detail-surat-keluar?uid=${notif.MessageUID}`;
+    };
+
+    const handleNotificationClick = async (notif) => {
+        await markNotificationAsRead(notif.UID);
+        setIsNotifOpen(false);
+        router.push(getNotificationTarget(notif));
+    };
+
+    const toggleNotifications = () => {
+        const next = !isNotifOpen;
+        setIsNotifOpen(next);
+        if (next && recipientUID) {
+            fetchNotifications(recipientUID);
+        }
+    };
 
     // Check if the screen is mobile
     useEffect(() => {
@@ -39,13 +75,16 @@ export default function Layout({ children }) {
             if (isMobile && sidebarOpen && !event.target.closest('.sidebar-container')) {
                 setSidebarOpen(false);
             }
+            if (isNotifOpen && !event.target.closest('.notification-container')) {
+                setIsNotifOpen(false);
+            }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [isMobile, sidebarOpen]);
+    }, [isMobile, sidebarOpen, isNotifOpen]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
@@ -235,9 +274,40 @@ export default function Layout({ children }) {
                         {/* Empty space for alignment */}
                     </div>
                     <div className="flex items-center space-x-2">
-                        <button className="relative text-gray-300 text-xl">
-                            <MdNotifications />
-                        </button>
+                        <div className="notification-container relative">
+                            <button
+                                onClick={toggleNotifications}
+                                className="relative text-gray-700 text-xl focus:outline-none"
+                            >
+                                <MdNotifications />
+                                {notificationCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] leading-none rounded-full px-1.5 py-1">
+                                        {notificationCount}
+                                    </span>
+                                )}
+                            </button>
+                            {isNotifOpen && (
+                                <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white shadow-lg rounded z-50">
+                                    {notifications.length === 0 ? (
+                                        <div className="p-4 text-sm text-gray-500 text-center">Tidak ada notifikasi</div>
+                                    ) : (
+                                        notifications.map((notif) => (
+                                            <div
+                                                key={notif.UID}
+                                                onClick={() => handleNotificationClick(notif)}
+                                                className={"px-4 py-3 text-sm border-b cursor-pointer hover:bg-gray-50" + (notif.IsRead ? " bg-white text-gray-500" : " bg-blue-50 text-gray-800 font-semibold")}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span>{notificationLabel(notif.Type)}</span>
+                                                    {!notif.IsRead && <span className="w-2 h-2 bg-blue-600 rounded-full ml-2 flex-shrink-0" />}
+                                                </div>
+                                                <div className="text-xs font-normal truncate mt-1">{notif.message_title}</div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
                         <div className="flex items-center space-x-2 text-gray-700">
                             <span className="font-semibold text-sm ml-3 mr-1">{name}</span>
                             <Image

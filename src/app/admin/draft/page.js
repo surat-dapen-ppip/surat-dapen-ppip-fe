@@ -5,6 +5,7 @@ import { Button, Form, message, Modal, Popconfirm, Select, Spin, Upload, Row, Co
 import { MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner, MdRestoreFromTrash, MdUpload } from 'react-icons/md';
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
+import LogAktivitas from '@/components/logAktivitas';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import dynamic from 'next/dynamic';
@@ -1018,6 +1019,7 @@ export default function pageDraft() {
                     </Suspense>
                 </div>
 
+                <LogAktivitas uid={UID} />
 
                 <Modal
                     open={isModalSubmitOpen}
