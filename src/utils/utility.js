@@ -104,13 +104,6 @@ export const CanAccessMessagePage = (pageType, data, currentUserUID) => {
     }
 }
 
-export const HasUserAlreadyReviewed = (logHistory, currentUserUID) => {
-    if (!Array.isArray(logHistory)) {
-        return false
-    }
-    return logHistory.some((record) => record.Action === 'reviewed' && record.UserUID === currentUserUID)
-}
-
 export const formatCurrentWIBTimestamp = () => {
     const formatter = new Intl.DateTimeFormat('id-ID', {
         timeZone: 'Asia/Jakarta',

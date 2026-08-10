@@ -8,8 +8,8 @@ import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { CanAccessMessagePage, GetCurrentDateInISOFormat, GetPositionName, HasUserAlreadyReviewed, ZeroPad } from '@/utils/utility';
-import { approveMessage, getMessageByUid, getMessageLogHistory } from '@/services/message';
+import { CanAccessMessagePage, GetCurrentDateInISOFormat, GetPositionName, ZeroPad } from '@/utils/utility';
+import { approveMessage, getMessageByUid, getMessagesForReviewer } from '@/services/message';
 import { getUserByUid, getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -436,8 +436,9 @@ export default function pageReview() {
                     }
 
                     if (data.MessageStatus == 41) {
-                        const logHistoryResponse = await getMessageLogHistory(uid)
-                        if (HasUserAlreadyReviewed(logHistoryResponse?.data, currentUserUID)) {
+                        const reviewerMessages = await getMessagesForReviewer(41, currentUserUID)
+                        const isStillPendingForThisUser = reviewerMessages?.data?.some((record) => record.UID === uid)
+                        if (!isStillPendingForThisUser) {
                             message.info('Anda sudah melakukan review pada surat ini')
                             router.push("/admin/daftarSurat")
                             return
