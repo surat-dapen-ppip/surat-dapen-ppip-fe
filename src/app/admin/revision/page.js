@@ -9,7 +9,7 @@ import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import dynamic from 'next/dynamic';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetCurrentDateInISOFormat, GetPositionName } from '@/utils/utility';
+import { CanAccessMessagePage, GetCurrentDateInISOFormat, GetPositionName } from '@/utils/utility';
 import { checkMessageAvailability, createMessage, getMessageByUid, getMessageCounter, updateMessage } from '@/services/message';
 import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -523,6 +523,13 @@ export default function pageDraft() {
                     if (!data) {
                         // Data not found, redirect to daftarSurat
                         message.info('Data surat tidak ditemukan')
+                        router.push("/admin/daftarSurat")
+                        return
+                    }
+
+                    const currentUserUID = window.localStorage.getItem('UserUID')
+                    if (!CanAccessMessagePage('revision', data, currentUserUID)) {
+                        message.info('Anda tidak memiliki akses untuk merevisi surat ini')
                         router.push("/admin/daftarSurat")
                         return
                     }

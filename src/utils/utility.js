@@ -64,6 +64,53 @@ export const ZeroPad = (input) => {
     return input.toString().padStart(4, '0');
 }
 
+export const CanAccessMessagePage = (pageType, data, currentUserUID) => {
+    if (!data || !currentUserUID) {
+        return false
+    }
+
+    const reviewerList = data.ReviewerUID ? data.ReviewerUID.split(',') : []
+    const ccList = data.CCUID ? data.CCUID.split(',') : []
+    const recipientList = data.RecipientUID ? data.RecipientUID.split(',') : []
+
+    const isDrafter = data.DrafterUID == currentUserUID
+    const isReviewer = reviewerList.includes(currentUserUID)
+    const isApprover = data.ApproverUID == currentUserUID
+    const isCC = ccList.includes(currentUserUID)
+    const isRecipient = recipientList.includes(currentUserUID)
+
+    switch (pageType) {
+        case 'draft':
+            // Only the drafter may continue editing their own draft (status 3)
+            return data.MessageStatus == 3 && isDrafter
+        case 'revision':
+            // Only the drafter may resubmit a message sent back for revision (status 5)
+            return data.MessageStatus == 5 && isDrafter
+        case 'review':
+            // Status 41 needs a reviewer's action, status 42 needs the approver's
+            if (data.MessageStatus == 41) {
+                return isReviewer
+            }
+            if (data.MessageStatus == 42) {
+                return isApprover
+            }
+            return false
+        case 'view':
+            // Read-only view is for anyone involved while waiting on review/approval, or once approved
+            return [2, 41, 42].some((status) => data.MessageStatus == status)
+                && (isDrafter || isReviewer || isApprover || isCC || isRecipient)
+        default:
+            return false
+    }
+}
+
+export const HasUserAlreadyReviewed = (logHistory, currentUserUID) => {
+    if (!Array.isArray(logHistory)) {
+        return false
+    }
+    return logHistory.some((record) => record.Action === 'reviewed' && record.UserUID === currentUserUID)
+}
+
 export const formatCurrentWIBTimestamp = () => {
     const formatter = new Intl.DateTimeFormat('id-ID', {
         timeZone: 'Asia/Jakarta',

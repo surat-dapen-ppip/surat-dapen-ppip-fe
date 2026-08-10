@@ -8,8 +8,8 @@ import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetCurrentDateInISOFormat, GetPositionName, ZeroPad } from '@/utils/utility';
-import { approveMessage, getMessageByUid } from '@/services/message';
+import { CanAccessMessagePage, GetCurrentDateInISOFormat, GetPositionName, HasUserAlreadyReviewed, ZeroPad } from '@/utils/utility';
+import { approveMessage, getMessageByUid, getMessageLogHistory } from '@/services/message';
 import { getUserByUid, getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -424,9 +424,24 @@ export default function pageReview() {
 
                     if (!data) {
                         message.info('Data surat tidak ditemukan')
-                        console.log(data)
-                        // router.push("/admin/daftarSurat")
+                        router.push("/admin/daftarSurat")
                         return
+                    }
+
+                    const currentUserUID = window.localStorage.getItem('UserUID')
+                    if (!CanAccessMessagePage('review', data, currentUserUID)) {
+                        message.info('Anda tidak memiliki akses untuk mereview surat ini')
+                        router.push("/admin/daftarSurat")
+                        return
+                    }
+
+                    if (data.MessageStatus == 41) {
+                        const logHistoryResponse = await getMessageLogHistory(uid)
+                        if (HasUserAlreadyReviewed(logHistoryResponse?.data, currentUserUID)) {
+                            message.info('Anda sudah melakukan review pada surat ini')
+                            router.push("/admin/daftarSurat")
+                            return
+                        }
                     }
 
                     setCurrentMessageRemark(data.MessageRemarkSender)
