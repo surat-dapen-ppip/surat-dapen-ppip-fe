@@ -8,7 +8,7 @@ import { getTemplateCodeByUid, getTemplateNameSurat, getTypeNameSurat } from '@/
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { CanAccessMessagePage, GetCurrentDateInISOFormat, GetPositionName, ZeroPad } from '@/utils/utility';
+import { CanAccessMessagePage, CanAccessMessagePageAsync, GetCurrentDateInISOFormat, GetPositionName, ZeroPad } from '@/utils/utility';
 import { approveMessage, getMessageByUid, getMessagesForReviewer } from '@/services/message';
 import { getUserByUid, getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -429,7 +429,8 @@ export default function pageReview() {
                     }
 
                     const currentUserUID = window.localStorage.getItem('UserUID')
-                    if (!CanAccessMessagePage('review', data, currentUserUID)) {
+                    const canAccess = await CanAccessMessagePageAsync('review', uid, currentUserUID)
+                    if (!canAccess) {
                         message.info('Anda tidak memiliki akses untuk mereview surat ini')
                         router.push("/admin/daftarSurat")
                         return

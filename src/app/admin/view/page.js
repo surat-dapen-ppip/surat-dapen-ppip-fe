@@ -6,7 +6,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
-import { CanAccessMessagePage, GetPositionName } from '@/utils/utility';
+import { CanAccessMessagePage, CanAccessMessagePageAsync, GetPositionName } from '@/utils/utility';
 import { getMessageByUid } from '@/services/message';
 import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -229,7 +229,8 @@ export default function pageView() {
                     }
 
                     const currentUserUID = window.localStorage.getItem('UserUID')
-                    if (!CanAccessMessagePage('view', data, currentUserUID)) {
+                    const canAccess = await CanAccessMessagePageAsync('view', uid, currentUserUID)
+                    if (!canAccess) {
                         message.info('Anda tidak memiliki akses untuk melihat surat ini')
                         router.push("/admin/daftarSurat")
                         return

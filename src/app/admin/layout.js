@@ -20,6 +20,7 @@ export default function Layout({ children }) {
         switch (type) {
             case 'review_needed': return 'Membutuhkan Review';
             case 'approval_needed': return 'Membutuhkan Persetujuan';
+            case 'revision_needed': return 'Membutuhkan Revisi';
             case 'disposisi': return 'Disposisi Surat';
             case 'forward': return 'Surat Diteruskan';
             case 'recipient': return 'Surat Ditujukan Kepada Anda';
@@ -30,6 +31,9 @@ export default function Layout({ children }) {
     const getNotificationTarget = (notif) => {
         if (notif.Type === 'review_needed' || notif.Type === 'approval_needed') {
             return `/admin/review?uid=${notif.MessageUID}`;
+        }
+        if (notif.Type === 'revision_needed') {
+            return `/admin/revision?uid=${notif.MessageUID}`;
         }
         if (notif.message_classification === 0) {
             return `/admin/inbox/detail-surat-masuk?uid=${notif.MessageUID}`;

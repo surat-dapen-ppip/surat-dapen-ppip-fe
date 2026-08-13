@@ -64,6 +64,20 @@ export const ZeroPad = (input) => {
     return input.toString().padStart(4, '0');
 }
 
+import { checkMessageAccess } from '@/services/message';
+
+export const CanAccessMessagePageAsync = async (pageType, uid, currentUserUID) => {
+    if (!uid || !currentUserUID) {
+        return false;
+    }
+    try {
+        const response = await checkMessageAccess(uid, currentUserUID, pageType);
+        return response?.data?.canAccess ?? false;
+    } catch (error) {
+        return false;
+    }
+};
+
 export const CanAccessMessagePage = (pageType, data, currentUserUID) => {
     if (!data || !currentUserUID) {
         return false
@@ -78,6 +92,7 @@ export const CanAccessMessagePage = (pageType, data, currentUserUID) => {
     const isApprover = data.ApproverUID == currentUserUID
     const isCC = ccList.includes(currentUserUID)
     const isRecipient = recipientList.includes(currentUserUID)
+    const hasEventAccess = Boolean(data.HasEventAccess)
 
     switch (pageType) {
         case 'draft':
@@ -96,9 +111,9 @@ export const CanAccessMessagePage = (pageType, data, currentUserUID) => {
             }
             return false
         case 'view':
-            // Read-only view is for anyone involved while waiting on review/approval, or once approved
-            return [2, 41, 42].some((status) => data.MessageStatus == status)
-                && (isDrafter || isReviewer || isApprover || isCC || isRecipient)
+            // Read-only view is for anyone involved while waiting on review/approval, once approved, or disposed
+            return [0, 1, 2, 41, 42].some((status) => data.MessageStatus == status)
+                && (isDrafter || isReviewer || isApprover || isCC || isRecipient || hasEventAccess)
         default:
             return false
     }

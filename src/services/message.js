@@ -476,3 +476,17 @@ export const deleteMessage = async (uid) => {
     throw error.response?.data || error;
   }
 };
+
+export const checkMessageAccess = async (uid, userUID, pageType) => {
+  try {
+    const response = await axiosInstance.get(`/messages/${uid}/check-access`, {
+      params: {
+        userUID: userUID,
+        pageType: pageType,
+      }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
