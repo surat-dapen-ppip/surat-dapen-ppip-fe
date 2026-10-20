@@ -187,6 +187,9 @@ export default function pageMemoDinas() {
         let listCC = []
         let listCCUID = []
 
+        let listReviewer = []
+        let listReviewerUID = []
+
         data.MessageClassification = 2
         data.MessageStatus = messageStatus
         data.TemplateUID = data?.TemplateObject?.value
@@ -197,8 +200,12 @@ export default function pageMemoDinas() {
         data.Approver = data.ApproverObject?.label
         data.ApproverUID = data.ApproverObject?.value
 
-        data.Reviewer = data.ReviewerObject?.label
-        data.ReviewerUID = data.ReviewerObject?.value
+        data.ReviewerObject?.forEach(item => {
+            listReviewer.push(item.label)
+            listReviewerUID.push(item.value)
+        });
+        data.Reviewer = listReviewer.join(',');
+        data.ReviewerUID = listReviewerUID.join(',');
 
         data.RecipientObject?.forEach(item => {
             listRecipient.push(item.label)
@@ -559,12 +566,17 @@ export default function pageMemoDinas() {
                                     >
                                         <Select
                                             labelInValue
+                                            mode="multiple"
+                                            showSearch
+                                            filterOption={(input, option) =>
+                                                option.label.toLowerCase().includes(input.toLowerCase())
+                                            }
                                             options={dataUser?.map((record) => {
                                                 return {
                                                     value: record.UID,
                                                     label: record.Name + " | " + (GetPositionName(record.PositionID) + " " + record.Organization?.Name)
                                                 }
-                                            })}
+                                            }).sort((a, b) => a.label.localeCompare(b.label))}
                                             placeholder="Pilih Reviewer Surat"
                                         />
                                     </Form.Item>

@@ -381,6 +381,15 @@ export const getMessageByUid = async (uid) => {
   }
 };
 
+export const getMessageLogHistory = async (uid) => {
+  try {
+    const response = await axiosInstance.get(`/messages/${uid}/log-history`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export const getArchiveMessage = async (archived, keyword, MessageNumber, MessageSender, MessageOrder, MessageCategory) => {
   try {
     const response = await axiosInstance.get(`/messageMaster/archived`, {
@@ -462,6 +471,20 @@ export const updateMessageProccessed = async (uid) => {
 export const deleteMessage = async (uid) => {
   try {
     const response = await axiosInstance.delete(`/messages/${uid}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const checkMessageAccess = async (uid, userUID, pageType) => {
+  try {
+    const response = await axiosInstance.get(`/messages/${uid}/check-access`, {
+      params: {
+        userUID: userUID,
+        pageType: pageType,
+      }
+    });
     return response.data;
   } catch (error) {
     throw error.response?.data || error;

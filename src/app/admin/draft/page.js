@@ -5,11 +5,12 @@ import { Button, Form, message, Modal, Popconfirm, Select, Spin, Upload, Row, Co
 import { MdDelete, MdDrafts, MdDownload, MdInsertDriveFile, MdOutlineDocumentScanner, MdRestoreFromTrash, MdUpload } from 'react-icons/md';
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { getTemplateNameSurat, getTemplateSuratByUid, getTypeNameSurat } from '@/services/messageTemplate';
+import LogAktivitas from '@/components/logAktivitas';
 import { getNatures } from '@/services/natures';
 import { getPriorities } from '@/services/priorities';
 import dynamic from 'next/dynamic';
 import { useLayoutContext } from '@/hooks/useLayoutContext';
-import { GetCurrentDateInISOFormat, GetPositionName } from '@/utils/utility';
+import { CanAccessMessagePage, CanAccessMessagePageAsync, GetCurrentDateInISOFormat, GetPositionName } from '@/utils/utility';
 import { checkMessageAvailability, getMessageByUid, getMessageCounter, updateMessage } from '@/services/message';
 import { getUsers } from '@/services/users';
 import { useRouter } from 'next/navigation';
@@ -510,6 +511,14 @@ export default function pageDraft() {
                     if (!data) {
                         // Data not found, redirect to daftarSurat
                         message.info('Data surat tidak ditemukan')
+                        router.push("/admin/daftarSurat")
+                        return
+                    }
+
+                    const currentUserUID = window.localStorage.getItem('UserUID')
+                    const canAccess = await CanAccessMessagePageAsync('draft', uid, currentUserUID)
+                    if (!canAccess) {
+                        message.info('Anda tidak memiliki akses untuk mengedit surat ini')
                         router.push("/admin/daftarSurat")
                         return
                     }
@@ -1018,6 +1027,7 @@ export default function pageDraft() {
                     </Suspense>
                 </div>
 
+                <LogAktivitas uid={UID} />
 
                 <Modal
                     open={isModalSubmitOpen}
